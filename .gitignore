@@ -5,6 +5,7 @@ build/
 
 # ===== 日志 =====
 *.log
+log
 log/
 log/*.log
 
