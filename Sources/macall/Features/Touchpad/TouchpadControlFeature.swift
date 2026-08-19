@@ -16,9 +16,9 @@ import Foundation
 // 「边缘滑入」手势，按住时按手指垂直位移相对调节亮度或音量。
 //
 // 设计要点：
-//   · 唯一触发方式「边缘滑入」：手指从最外约 12% 起手、向内滑动超过阈值即锁定调节态，
-//     上下拖动即相对调节，抬起结束。比双击更自然，也不容易被正常滚动误触发
-//     （正常垂直滚动没有向内位移）。
+//   · 唯一触发方式「边缘滑入」：手指必须从最外约 6% 起手（防「靠近边缘就误触」）、
+//     向内滑动超过阈值且以横向滑动为主（向内位移 ≥ 垂直位移；正常滚动是垂直的）才锁定调节态，
+//     上下拖动即相对调节，抬起结束。比双击更自然，也不容易被正常滚动误触发。
 //   · 左右边缘映射可配置：左 → 亮度（默认）、右 → 音量（默认），也可各自设为 off。
 //   · 调节过程支持「逐级触觉」：数值每跨越约 2% 给一次轻微「咔哒」反馈（可在设置关闭）。
 //   · 上下拖动灵敏度可在设置页自定义（touchpadSensitivity）。
@@ -60,15 +60,15 @@ final class TouchpadControlFeature: Feature {
         var lastX: Float = 0
         var lastY: Float = 0
         var maxMove: Float = 0
-        var side: EdgeSide? = nil   // 起手边（边缘滑入用最外缘判定，双击保持用 25% 边缘区）
+        var side: EdgeSide? = nil   // 起手边（边缘滑入：仅最外缘起手才有效）
         var armed = false           // 边缘滑入：是否已滑过阈值锁定调节
         var lifted = false
     }
 
     // 手势参数（灵敏度改为设置项 touchpadSensitivity，其余为经验常量）。
     private let applyThreshold: Float = 0.005     // 变化超过该值才真正下发，避免高频抖动
-    private let swipeStartZone: Float = 0.12      // 边缘滑入：必须从最外 12% 起手
-    private let swipeMinTravel: Float = 0.12      // 边缘滑入：向内滑动超过该距离才锁定调节
+    private let swipeStartZone: Float = 0.06      // 边缘滑入：必须从最外 6% 起手（防「靠近边缘就误触」）
+    private let swipeMinTravel: Float = 0.15      // 边缘滑入：向内滑动超过该距离才锁定调节
     private let hapticStep: Float = 0.02          // 逐级触觉：每跨越约 2% 给一次「咔哒」反馈
     private static let mtTouchStride = 96         // 单个 MTTouch 结构体字节长度（macOS 15/26 实测一致）
 
@@ -222,10 +222,12 @@ final class TouchpadControlFeature: Feature {
                         downTime: timestamp, downX: nx, downY: ny,
                         lastX: nx, lastY: ny, side: side, armed: false)
                 }
-                // 边缘滑入：从最外缘向内滑过阈值即锁定调节。
+                // 边缘滑入：必须从最外缘起手、向内滑过阈值且以横向为主
+                // （向内位移 ≥ 垂直位移，正常滚动是垂直的）才锁定调节，防误触。
                 if gState == .idle,
                    let t = fingers[path], let s = t.side, !t.armed,
-                   inwardTravel(t) >= swipeMinTravel {
+                   inwardTravel(t) >= swipeMinTravel,
+                   inwardTravel(t) >= abs(t.lastY - t.downY) {
                     var nt = t; nt.armed = true; fingers[path] = nt
                     beginHold(path: path, action: actionFor(s), startY: nt.lastY, t: timestamp)
                 }
