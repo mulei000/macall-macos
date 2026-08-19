@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>actions</key>
+    <array>
+        <dict>
+            <key>action</key>
+            <dict>
+                <key>AMAccepts</key>
+                <dict>
+                    <key>Container</key>
+                    <string>List</string>
+                    <key>Item</key>
+                    <string>com.apple.cocoa.path</string>
+                </dict>
+                <key>AMActionClass</key>
+                <string>RunShellScriptAction</string>
+                <key>AMActionID</key>
+                <string>macall-move-0001</string>
+                <key>AMCategory</key>
+                <string>am:execute</string>
+                <key>AMContents</key>
+                <dict>
+                    <key>AMShellScript</key>
+                    <string>#!/bin/bash
+# 接收 Finder 右键选中的文件/文件夹（$@），写入临时文件，转交给 macall。
+# macall 会弹出「预设文件夹 + 自选文件夹」面板，完成移动。
+# 临时文件路径为纯 ASCII（mktemp 默认模板），无需 URL 编码，直接拼入查询即可。
+op="move"
+tmp="$(mktemp -t macall-finder)"
+for f in "$@"; do printf '%s\n' "$f" &gt;&gt; "$tmp"; done
+open "macall://finder?op=$op&amp;f=$tmp"
+</string>
+                    <key>inputmethod</key>
+                    <integer>1</integer>
+                    <key>shell</key>
+                    <string>/bin/bash</string>
+                    <key>source</key>
+                    <string>#!/bin/bash
+op="move"
+tmp="$(mktemp -t macall-finder)"
+for f in "$@"; do printf '%s\n' "$f" &gt;&gt; "$tmp"; done
+open "macall://finder?op=$op&amp;f=$tmp"
+</string>
+                </dict>
+                <key>AMName</key>
+                <string>Run Shell Script</string>
+                <key>AMOutputs</key>
+                <dict>
+                    <key>Container</key>
+                    <string>List</string>
+                    <key>Item</key>
+                    <string>com.apple.cocoa.string</string>
+                </dict>
+                <key>AMParameters</key>
+                <dict>
+                    <key>COMMAND_STRING</key>
+                    <string>#!/bin/bash
+op="move"
+tmp="$(mktemp -t macall-finder)"
+for f in "$@"; do printf '%s\n' "$f" &gt;&gt; "$tmp"; done
+open "macall://finder?op=$op&amp;f=$tmp"
+</string>
+                    <key>CheckedForUpdates</key>
+                    <true/>
+                    <key>inputMethod</key>
+                    <string>1</string>
+                </dict>
+            </dict>
+            <key>isViewVisible</key>
+            <true/>
+        </dict>
+    </array>
+    <key>connectors</key>
+    <dict/>
+    <key>workflowType</key>
+    <string>com.apple.automator.quickaction</string>
+    <key>workflowDisplayName</key>
+    <string>macall：移动到文件夹</string>
+    <key>settings</key>
+    <dict>
+        <key>processesInput</key>
+        <true/>
+        <key>inputType</key>
+        <string>file</string>
+        <key>outputType</key>
+        <string>string</string>
+    </dict>
+</dict>
+</plist>

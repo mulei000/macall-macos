@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- 「输入监听」功能需要读取麦克风。Hardened Runtime 下若无此项，
+         即使用户在系统设置里授权了麦克风，进程仍会被直接拒绝。 -->
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
+
+    <!-- 自签名证书 + Hardened Runtime 时，加载系统私有框架（SkyLight / login 等）
+         可能被库校验拦下，关掉以保证锁屏、深色模式切换等私有 API 路径可用。 -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+
+    <!-- 注意：不要加 com.apple.security.get-task-allow。
+         它会把 app 标记为「可被调试器附加 / 可注入」，部分 macOS 版本的 TCC
+         会因此拒绝授予辅助功能权限——正是我们要避免的故障。 -->
+</dict>
+</plist>

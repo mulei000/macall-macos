@@ -1,0 +1,28 @@
+# ===== 构建产物 =====
+build/
+.build/
+*.app
+
+# ===== 日志 =====
+*.log
+log/
+log/*.log
+
+# ===== macOS 系统文件 =====
+.DS_Store
+.AppleDouble
+.fseventsd
+.Spotlight-V100
+.Trashes
+VolumeIcon.icns
+
+# ===== Xcode / SPM 缓存（若启用）=====
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.swiftpm/
+DerivedData/
+
+# ===== 编辑器 =====
+.vscode/
+.idea/
+*.swp

@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>macall</string>
+    <key>CFBundleDisplayName</key>
+    <string>macall</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.macall.app</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundleVersion</key>
+    <string>6</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.2.4</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleExecutable</key>
+    <string>macall</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>15.0</string>
+    <!-- 菜单栏常驻代理应用：无 Dock 图标，仅菜单栏 + 设置窗口 -->
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <!-- 输入监听（麦克风环回扬声器）需要读取音频输入。
+         macOS 14+ 缺这条 usage description 时 TCC 会直接拒绝，
+         聚合设备虽然建得起来但输入缓冲区永远是静音——这正是
+         v0.4.9 之前「⌃⌥U 按了没反应」的原因之一。 -->
+    <key>NSMicrophoneUsageDescription</key>
+    <string>开启「输入监听」后，macall 需要读取麦克风声音并实时播放到扬声器，便于你监听自己的声音。</string>
+    <!-- 逐 App 音量（CoreAudio 进程 tap）必需。
+         macOS 14.4+ 起 AudioHardwareCreateProcessTap 归属「系统音频录制」这一新 TCC 类别，
+         缺这条 usage description 时 TCC 连授权对话框都不会弹，
+         AudioHardwareCreateProcessTap 直接返回错误 —— 表现就是
+         「分应用音量完全没有实现」：设置页里滑块能拖，声音却一点变化都没有。 -->
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>开启「分应用音量」后，macall 需要拦截指定 App 的音频输出，才能单独调节它的音量、静音与路由。</string>
+    <key>NSSystemAudioCaptureUsageDescription</key>
+    <string>开启「分应用音量」后，macall 需要拦截指定 App 的音频输出，才能单独调节它的音量、静音与路由。</string>
+    <!-- 自定义 URL 方案：允许外部程序/脚本通过 macall:// 控制音量、设备、EQ -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.macall.app</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>macall</string>
+            </array>
+        </dict>
+    </array>
+    <!-- 自定义 URL 方案：允许外部程序/脚本通过 macall:// 控制音量、设备 -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.macall.app</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>macall</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist>
