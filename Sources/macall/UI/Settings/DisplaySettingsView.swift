@@ -82,14 +82,15 @@ struct DisplaySettingsView: View {
             icon: "dial.medium.fill",
             colors: IadenteTheme.dashboardColors
         ) {
-            Slider(
-                value: Binding(
-                    get: { model.config.touchpadSensitivity },
-                    set: { model.config.touchpadSensitivity = $0; model.save() }
-                ),
-                in: 0.2...1.5, step: 0.05
-            )
-            .frame(width: 170)
+            HStack(spacing: 6) {
+                TextField("", value: dragSensitivity, format: .number.precision(.fractionLength(2)))
+                    .textFieldStyle(.roundedBorder)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 56)
+                Stepper("", value: dragSensitivity, in: 0.2...1.5, step: 0.05)
+                    .labelsHidden()
+            }
+            .frame(width: 190)
         }
 
         IadenteRowDivider()
@@ -201,6 +202,20 @@ struct DisplaySettingsView: View {
                 "This relies on the private MultitouchSupport framework, bridged on your Mac. If it does nothing after enabling, check the [touchpad] log."),
             icon: "info.circle.fill",
             colors: IadenteTheme.dashboardColors
+        )
+    }
+
+    /// 拖动灵敏度（0.2…1.5，0.05 步进）数字编辑：输入吸附到 0.05 的倍数并 clamp。
+    private var dragSensitivity: Binding<Double> {
+        Binding(
+            get: { model.config.touchpadSensitivity },
+            set: { v in
+                guard v.isFinite else { return }
+                let step = 0.05
+                let snapped = (v / step).rounded() * step
+                model.config.touchpadSensitivity = min(1.5, max(0.2, snapped))
+                model.save()
+            }
         )
     }
 
