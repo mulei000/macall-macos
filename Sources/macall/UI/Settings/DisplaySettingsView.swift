@@ -102,14 +102,18 @@ struct DisplaySettingsView: View {
             icon: "arrow.down.and.line.horizontal.and.arrow.up",
             colors: IadenteTheme.dashboardColors
         ) {
-            Slider(
-                value: Binding(
-                    get: { model.config.touchpadStartZone },
-                    set: { model.config.touchpadStartZone = $0; model.save() }
-                ),
-                in: 0.02...0.15, step: 0.01
-            )
-            .frame(width: 170)
+            HStack(spacing: 6) {
+                TextField("", value: startZonePercent, format: .number.precision(.fractionLength(0)))
+                    .textFieldStyle(.roundedBorder)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 56)
+                Text("%")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Stepper("", value: startZonePercent, in: 2...15, step: 1)
+                    .labelsHidden()
+            }
+            .frame(width: 190)
         }
 
         IadenteControlRow(
@@ -120,14 +124,18 @@ struct DisplaySettingsView: View {
             icon: "arrow.left.to.line.compact",
             colors: IadenteTheme.dashboardColors
         ) {
-            Slider(
-                value: Binding(
-                    get: { model.config.touchpadMinTravel },
-                    set: { model.config.touchpadMinTravel = $0; model.save() }
-                ),
-                in: 0.05...0.30, step: 0.01
-            )
-            .frame(width: 170)
+            HStack(spacing: 6) {
+                TextField("", value: minTravelPercent, format: .number.precision(.fractionLength(0)))
+                    .textFieldStyle(.roundedBorder)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 56)
+                Text("%")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Stepper("", value: minTravelPercent, in: 5...30, step: 1)
+                    .labelsHidden()
+            }
+            .frame(width: 190)
         }
 
         IadenteRowDivider()
@@ -193,6 +201,30 @@ struct DisplaySettingsView: View {
                 "This relies on the private MultitouchSupport framework, bridged on your Mac. If it does nothing after enabling, check the [touchpad] log."),
             icon: "info.circle.fill",
             colors: IadenteTheme.dashboardColors
+        )
+    }
+
+    /// 起手区（配置存 0.02…0.15）以整数百分比编辑（2…15）。
+    private var startZonePercent: Binding<Double> {
+        Binding(
+            get: { model.config.touchpadStartZone * 100 },
+            set: { v in
+                let p = v.isFinite ? min(15, max(2, v.rounded())) : (model.config.touchpadStartZone * 100)
+                model.config.touchpadStartZone = p / 100
+                model.save()
+            }
+        )
+    }
+
+    /// 向内行程（配置存 0.05…0.30）以整数百分比编辑（5…30）。
+    private var minTravelPercent: Binding<Double> {
+        Binding(
+            get: { model.config.touchpadMinTravel * 100 },
+            set: { v in
+                let p = v.isFinite ? min(30, max(5, v.rounded())) : (model.config.touchpadMinTravel * 100)
+                model.config.touchpadMinTravel = p / 100
+                model.save()
+            }
         )
     }
 
