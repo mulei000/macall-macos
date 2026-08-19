@@ -105,6 +105,10 @@ struct Configuration: Codable {
     /// 触控板手势调节：上下拖动的灵敏度（增益）。值越小越不灵敏（需更大位移才调同样多）。
     /// 0.2 = 很钝，1.0 = 偏灵敏，建议 0.4…0.8；默认 0.6。
     var touchpadSensitivity: Double = 0.6
+    /// 边缘滑入起手区：手指必须落在最外 N%（0.02=必须贴最外缘，0.15=较宽松）；默认 0.06。
+    var touchpadStartZone: Double = 0.06
+    /// 边缘滑入向内行程：起手后需向内滑过该距离才锁定调节（0.05=灵敏，0.30=需明显滑动）；默认 0.15。
+    var touchpadMinTravel: Double = 0.15
     /// 左边缘区域（触控板最左约 25%）对应的动作。
     var touchpadLeftAction: TouchpadEdgeAction = .brightness
     /// 右边缘区域（触控板最右约 18%）对应的动作。
@@ -350,7 +354,7 @@ struct Configuration: Codable {
     private enum CodingKeys: String, CodingKey {
         case enabled, gap, monitorShowPercentage, enabledFeatures, enabledHotkeys, hotkeys, previewEnabled, outputDeviceUIDs, perAppVolume, perAppMuted, perAppDeviceUIDs, autoRouteOutput, devicePriority, outputSwitcherDeviceUIDs, dockToggleBehavior, edgeSnapSelectorEnabled, edgeSnapLeftLayout, edgeSnapRightLayout
         case hiddenAudioApps, hiddenAudioAppNames, audioDeviceOrder, hiddenAudioDevices
-        case clipboardMaxItems, clipboardRetentionDays, clipboardKeepImages, clipboardKeepFiles, magnifierZoom, maxTemporaryScenes, defaultInputDeviceUID, systemSoundOutputDeviceUID, autoDuckOnHeadphoneUnplug, autoDuckTargetVolume, touchpadSensitivity, touchpadLeftAction, touchpadRightAction, touchpadHaptic
+        case clipboardMaxItems, clipboardRetentionDays, clipboardKeepImages, clipboardKeepFiles, magnifierZoom, maxTemporaryScenes, defaultInputDeviceUID, systemSoundOutputDeviceUID, autoDuckOnHeadphoneUnplug, autoDuckTargetVolume, touchpadSensitivity, touchpadStartZone, touchpadMinTravel, touchpadLeftAction, touchpadRightAction, touchpadHaptic
     }
 
     init(from d: Decoder) throws {
@@ -388,6 +392,8 @@ struct Configuration: Codable {
         magnifierZoom = try c.decodeIfPresent(Double.self, forKey: .magnifierZoom) ?? 3
         maxTemporaryScenes = try c.decodeIfPresent(Int.self, forKey: .maxTemporaryScenes) ?? 12
         touchpadSensitivity = try c.decodeIfPresent(Double.self, forKey: .touchpadSensitivity) ?? 0.6
+        touchpadStartZone = try c.decodeIfPresent(Double.self, forKey: .touchpadStartZone) ?? 0.06
+        touchpadMinTravel = try c.decodeIfPresent(Double.self, forKey: .touchpadMinTravel) ?? 0.15
         touchpadLeftAction = try c.decodeIfPresent(TouchpadEdgeAction.self, forKey: .touchpadLeftAction) ?? .brightness
         touchpadRightAction = try c.decodeIfPresent(TouchpadEdgeAction.self, forKey: .touchpadRightAction) ?? .volume
         touchpadHaptic = try c.decodeIfPresent(Bool.self, forKey: .touchpadHaptic) ?? true
@@ -428,6 +434,8 @@ struct Configuration: Codable {
         try c.encode(magnifierZoom, forKey: .magnifierZoom)
         try c.encode(maxTemporaryScenes, forKey: .maxTemporaryScenes)
         try c.encode(touchpadSensitivity, forKey: .touchpadSensitivity)
+        try c.encode(touchpadStartZone, forKey: .touchpadStartZone)
+        try c.encode(touchpadMinTravel, forKey: .touchpadMinTravel)
         try c.encode(touchpadLeftAction, forKey: .touchpadLeftAction)
         try c.encode(touchpadRightAction, forKey: .touchpadRightAction)
         try c.encode(touchpadHaptic, forKey: .touchpadHaptic)

@@ -95,6 +95,44 @@ struct DisplaySettingsView: View {
         IadenteRowDivider()
 
         IadenteControlRow(
+            IadenteL10n.t("起手区", "Edge start zone"),
+            subtitle: IadenteL10n.t(
+                "手指必须落在最外 N% 才开始算边缘滑入。越小越严格（必须贴最外缘），越大越宽松；默认 6%。",
+                "Finger must land in the outermost N% to count as an edge swipe. Lower = stricter (right at the edge), higher = looser; default 6%."),
+            icon: "arrow.down.and.line.horizontal.and.arrow.up",
+            colors: IadenteTheme.dashboardColors
+        ) {
+            Slider(
+                value: Binding(
+                    get: { model.config.touchpadStartZone },
+                    set: { model.config.touchpadStartZone = $0; model.save() }
+                ),
+                in: 0.02...0.15, step: 0.01
+            )
+            .frame(width: 170)
+        }
+
+        IadenteControlRow(
+            IadenteL10n.t("向内行程", "Inward travel"),
+            subtitle: IadenteL10n.t(
+                "起手后需向内滑动多少才锁定调节。越大越不容易误触，但需要更明显的滑动；默认 15%。",
+                "How far the finger must slide inward before adjusting locks in. Higher = fewer accidental triggers but needs a clearer swipe; default 15%."),
+            icon: "arrow.left.to.line.compact",
+            colors: IadenteTheme.dashboardColors
+        ) {
+            Slider(
+                value: Binding(
+                    get: { model.config.touchpadMinTravel },
+                    set: { model.config.touchpadMinTravel = $0; model.save() }
+                ),
+                in: 0.05...0.30, step: 0.01
+            )
+            .frame(width: 170)
+        }
+
+        IadenteRowDivider()
+
+        IadenteControlRow(
             IadenteL10n.t("左边缘", "Left edge"),
             subtitle:             IadenteL10n.t(
                 "触控板最左约 25% 区域触发的动作。",

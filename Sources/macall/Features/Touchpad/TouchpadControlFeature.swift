@@ -16,12 +16,14 @@ import Foundation
 // 「边缘滑入」手势，按住时按手指垂直位移相对调节亮度或音量。
 //
 // 设计要点：
-//   · 唯一触发方式「边缘滑入」：手指必须从最外约 6% 起手（防「靠近边缘就误触」）、
-//     向内滑动超过阈值且以横向滑动为主（向内位移 ≥ 垂直位移；正常滚动是垂直的）才锁定调节态，
-//     上下拖动即相对调节，抬起结束。比双击更自然，也不容易被正常滚动误触发。
+//   · 唯一触发方式「边缘滑入」：手指必须从最外侧起手（起手区默认最外 6%，防「靠近边缘就误触」）、
+//     向内滑动超过向内行程阈值（默认 0.15）且以横向滑动为主（向内位移 ≥ 垂直位移；
+//     正常滚动是垂直的）才锁定调节态，上下拖动即相对调节，抬起结束。比双击更自然，
+//     也不容易被正常滚动误触发。起手区与向内行程均可在设置页自定义，方便调到舒适范围。
 //   · 左右边缘映射可配置：左 → 亮度（默认）、右 → 音量（默认），也可各自设为 off。
 //   · 调节过程支持「逐级触觉」：数值每跨越约 2% 给一次轻微「咔哒」反馈（可在设置关闭）。
-//   · 上下拖动灵敏度可在设置页自定义（touchpadSensitivity）。
+//   · 上下拖动灵敏度、起手区、向内行程均可在设置页自定义
+//     （touchpadSensitivity / touchpadStartZone / touchpadMinTravel）。
 //   · 私有框架用 dlopen / dlsym 动态桥接（与项目里 DDC.swift、PrivateAPI.swift 同范式），
 //     任何一步失败都「fail-closed」：只记日志、不影响 app 其余部分。
 //
@@ -65,10 +67,9 @@ final class TouchpadControlFeature: Feature {
         var lifted = false
     }
 
-    // 手势参数（灵敏度改为设置项 touchpadSensitivity，其余为经验常量）。
+    // 手势参数：灵敏度 / 起手区 / 向内行程均为设置页可自定义项（读 config.touchpad*），
+    // 其余为经验常量。
     private let applyThreshold: Float = 0.005     // 变化超过该值才真正下发，避免高频抖动
-    private let swipeStartZone: Float = 0.06      // 边缘滑入：必须从最外 6% 起手（防「靠近边缘就误触」）
-    private let swipeMinTravel: Float = 0.15      // 边缘滑入：向内滑动超过该距离才锁定调节
     private let hapticStep: Float = 0.02          // 逐级触觉：每跨越约 2% 给一次「咔哒」反馈
     private static let mtTouchStride = 96         // 单个 MTTouch 结构体字节长度（macOS 15/26 实测一致）
 
@@ -226,7 +227,7 @@ final class TouchpadControlFeature: Feature {
                 // （向内位移 ≥ 垂直位移，正常滚动是垂直的）才锁定调节，防误触。
                 if gState == .idle,
                    let t = fingers[path], let s = t.side, !t.armed,
-                   inwardTravel(t) >= swipeMinTravel,
+                   inwardTravel(t) >= Float(config.touchpadMinTravel),
                    inwardTravel(t) >= abs(t.lastY - t.downY) {
                     var nt = t; nt.armed = true; fingers[path] = nt
                     beginHold(path: path, action: actionFor(s), startY: nt.lastY, t: timestamp)
@@ -305,10 +306,11 @@ final class TouchpadControlFeature: Feature {
         hideHUD()
     }
 
-    /// 边缘滑入起手边：必须从最外 swipeStartZone 起手。
+    /// 边缘滑入起手边：必须从最外 touchpadStartZone 起手（设置页可自定义）。
     private func swipeSideOf(_ x: Float) -> EdgeSide? {
-        if x < swipeStartZone { return .left }
-        if x > 1 - swipeStartZone { return .right }
+        let zone = Float(config.touchpadStartZone)
+        if x < zone { return .left }
+        if x > 1 - zone { return .right }
         return nil
     }
 
