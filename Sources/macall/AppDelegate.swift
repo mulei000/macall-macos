@@ -86,6 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DevicePriorityFeature(),
             DDCFeature(),
             TouchpadControlFeature(),
+            MouseOptimizeFeature(),
             toolboxFeature,
             keyboardCleanFeature,
         ]

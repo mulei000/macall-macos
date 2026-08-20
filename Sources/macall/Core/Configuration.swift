@@ -20,6 +20,12 @@ enum TouchpadEdgeAction: String, Codable, CaseIterable {
     case off         // 该边缘不触发
 }
 
+/// 鼠标平滑滚动的两种模式：轻量（低通滤波，仅平滑抖动）或完整惯性（带滑行尾迹）。
+enum MouseSmoothMode: String, Codable, CaseIterable {
+    case light  // 轻量：直接透传低通滤波后的值，不改变滚动总量，最稳
+    case full   // 完整：当场只放一部分，余量衰减补发，形成惯性滑行
+}
+
 /// 全局配置。保存到 `~/.config/macall/config.json`，对新旧字段容错。
 struct Configuration: Codable {
     /// 全局总开关（关闭后所有快捷键透传）。
@@ -115,6 +121,15 @@ struct Configuration: Codable {
     var touchpadRightAction: TouchpadEdgeAction = .volume
     /// 调节时是否给出触觉反馈。
     var touchpadHaptic: Bool = true
+
+    /// 鼠标优化 - 滚轮独立反转（只影响鼠标滚轮，不碰触控板）。默认 false。
+    var mouseScrollInvert: Bool = false
+    /// 鼠标优化 - 平滑滚动（轻量低通，消除生硬感）。默认 false。
+    var mouseSmoothScroll: Bool = false
+    /// 鼠标优化 - 平滑模式：轻量（默认）或完整惯性。
+    var mouseSmoothMode: MouseSmoothMode = .light
+    /// 鼠标优化 - 侧键互换（X1 后退 ↔ X2 前进）。默认 false。
+    var mouseSideButtonSwap: Bool = false
 
     init() {}
 
@@ -355,6 +370,7 @@ struct Configuration: Codable {
         case enabled, gap, monitorShowPercentage, enabledFeatures, enabledHotkeys, hotkeys, previewEnabled, outputDeviceUIDs, perAppVolume, perAppMuted, perAppDeviceUIDs, autoRouteOutput, devicePriority, outputSwitcherDeviceUIDs, dockToggleBehavior, edgeSnapSelectorEnabled, edgeSnapLeftLayout, edgeSnapRightLayout
         case hiddenAudioApps, hiddenAudioAppNames, audioDeviceOrder, hiddenAudioDevices
         case clipboardMaxItems, clipboardRetentionDays, clipboardKeepImages, clipboardKeepFiles, magnifierZoom, maxTemporaryScenes, defaultInputDeviceUID, systemSoundOutputDeviceUID, autoDuckOnHeadphoneUnplug, autoDuckTargetVolume, touchpadSensitivity, touchpadStartZone, touchpadMinTravel, touchpadLeftAction, touchpadRightAction, touchpadHaptic
+        case mouseScrollInvert, mouseSmoothScroll, mouseSmoothMode, mouseSideButtonSwap
     }
 
     init(from d: Decoder) throws {
@@ -397,6 +413,10 @@ struct Configuration: Codable {
         touchpadLeftAction = try c.decodeIfPresent(TouchpadEdgeAction.self, forKey: .touchpadLeftAction) ?? .brightness
         touchpadRightAction = try c.decodeIfPresent(TouchpadEdgeAction.self, forKey: .touchpadRightAction) ?? .volume
         touchpadHaptic = try c.decodeIfPresent(Bool.self, forKey: .touchpadHaptic) ?? true
+        mouseScrollInvert = try c.decodeIfPresent(Bool.self, forKey: .mouseScrollInvert) ?? false
+        mouseSmoothScroll = try c.decodeIfPresent(Bool.self, forKey: .mouseSmoothScroll) ?? false
+        mouseSmoothMode = try c.decodeIfPresent(MouseSmoothMode.self, forKey: .mouseSmoothMode) ?? .light
+        mouseSideButtonSwap = try c.decodeIfPresent(Bool.self, forKey: .mouseSideButtonSwap) ?? false
     }
 
     func encode(to e: Encoder) throws {
@@ -439,5 +459,9 @@ struct Configuration: Codable {
         try c.encode(touchpadLeftAction, forKey: .touchpadLeftAction)
         try c.encode(touchpadRightAction, forKey: .touchpadRightAction)
         try c.encode(touchpadHaptic, forKey: .touchpadHaptic)
+        try c.encode(mouseScrollInvert, forKey: .mouseScrollInvert)
+        try c.encode(mouseSmoothScroll, forKey: .mouseSmoothScroll)
+        try c.encode(mouseSmoothMode, forKey: .mouseSmoothMode)
+        try c.encode(mouseSideButtonSwap, forKey: .mouseSideButtonSwap)
     }
 }

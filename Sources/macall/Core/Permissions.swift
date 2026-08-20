@@ -85,6 +85,11 @@ enum Permissions {
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")!)
     }
 
+    /// 跳转到系统「鼠标」设置面板（用于光标加速度等系统级调节）。
+    static func openMouseSettings() {
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.mouse")!)
+    }
+
     static func openScreenRecordingSettings() {
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
     }

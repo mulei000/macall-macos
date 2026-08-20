@@ -2,15 +2,27 @@ import AppKit
 import CoreGraphics
 import SwiftUI
 
-/// 屏幕设置页：显示器控制（DDC）、屏幕放大镜、屏幕取色。
+/// 屏幕设置页：触控板与鼠标、显示器控制（DDC）、屏幕放大镜、屏幕取色。
 /// 每个模块的总开关都在自己卡片右上角，样式与其他页面完全一致。
 struct DisplaySettingsView: View {
     @ObservedObject var model: SettingsModel
 
     var body: some View {
         IadenteSettingsPage {
+            // —— 触控板与鼠标：把触控板手势调节与新增的鼠标优化归到同一分组 ——
+            SectionHeader(
+                IadenteL10n.t("触控板与鼠标", "Trackpad & Mouse"),
+                subtitle: IadenteL10n.t(
+                    "触控板边缘手势与鼠标滚轮 / 侧键优化。两者互不干扰：鼠标优化只改鼠标滚轮，绝不碰触控板。",
+                    "Trackpad edge gestures and mouse wheel / side-button tweaks. They never interfere: mouse optimization only touches the mouse wheel.")
+            )
+
             FeatureModuleCard(model: model, featureID: "touchpadControl", showsHotkeys: false) {
                 touchpadGestureSettings
+            }
+
+            FeatureModuleCard(model: model, featureID: "mouseOptimize", showsHotkeys: false) {
+                mouseOptimizeSettings
             }
 
             FeatureModuleCard(model: model, featureID: "ddc") {
@@ -24,6 +36,33 @@ struct DisplaySettingsView: View {
             FeatureModuleCard(model: model, featureID: "colorpicker") {
                 ColorPickerTestRow()
             }
+        }
+    }
+
+    // MARK: - 分组标题
+
+    private struct SectionHeader: View {
+        let title: String
+        let subtitle: String?
+
+        init(_ title: String, subtitle: String? = nil) {
+            self.title = title
+            self.subtitle = subtitle
+        }
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.primary)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 2)
         }
     }
 
@@ -71,8 +110,7 @@ struct DisplaySettingsView: View {
     // MARK: - 触控板手势调节
 
     @ViewBuilder
-    private var touchpadGestureSettings: some View {
-        IadenteRowDivider()
+    private var touchpadGestureSettings: some View {        IadenteRowDivider()
 
         IadenteControlRow(
             IadenteL10n.t("拖动灵敏度", "Drag sensitivity"),
@@ -200,6 +238,100 @@ struct DisplaySettingsView: View {
             text: IadenteL10n.t(
                 "该功能依赖 macOS 私有框架 MultitouchSupport，桥接在用户本机完成。若开启后无反应，请查看日志 [touchpad]。",
                 "This relies on the private MultitouchSupport framework, bridged on your Mac. If it does nothing after enabling, check the [touchpad] log."),
+            icon: "info.circle.fill",
+            colors: IadenteTheme.dashboardColors
+        )
+    }
+
+    // MARK: - 鼠标优化
+
+    @ViewBuilder
+    private var mouseOptimizeSettings: some View {
+        IadenteRowDivider()
+
+        IadenteSettingToggle(
+            IadenteL10n.t("滚轮独立反转", "Invert scroll direction"),
+            subtitle: IadenteL10n.t(
+                "只反转鼠标滚轮方向，不影响触控板（系统设置里两者是绑定的，这里解耦）。",
+                "Invert only the mouse wheel, leaving the trackpad untouched (the system binds both together)."),
+            icon: "arrow.up.arrow.down.circle",
+            colors: IadenteTheme.dashboardColors,
+            isOn: Binding(
+                get: { model.config.mouseScrollInvert },
+                set: { model.config.mouseScrollInvert = $0; model.save() }
+            )
+        )
+
+        IadenteRowDivider()
+
+        IadenteSettingToggle(
+            IadenteL10n.t("平滑滚动", "Smooth scrolling"),
+            subtitle: IadenteL10n.t(
+                "轻量低通滤波，让生硬的滚轮变顺滑（默认不改变滚动总量）。可在下方切换『完整惯性』。",
+                "A light low-pass filter that softens the wheel (no change to total scroll by default). Switch to full inertia below."),
+            icon: "waveform.path",
+            colors: IadenteTheme.dashboardColors,
+            isOn: Binding(
+                get: { model.config.mouseSmoothScroll },
+                set: { model.config.mouseSmoothScroll = $0; model.save() }
+            )
+        )
+
+        IadenteControlRow(
+            IadenteL10n.t("平滑模式", "Smoothing mode"),
+            subtitle: IadenteL10n.t(
+                "轻量：直接透传滤波后的值，最稳；完整：带惯性滑行尾迹（像触控板那样有减速过程）。",
+                "Light: pass the filtered value through (safest). Full: adds inertial glide with a deceleration tail."),
+            icon: "slider.horizontal.below.rectangle",
+            colors: IadenteTheme.dashboardColors
+        ) {
+            Picker("", selection: Binding(
+                get: { model.config.mouseSmoothMode },
+                set: { model.config.mouseSmoothMode = $0; model.save() }
+            )) {
+                Text(IadenteL10n.t("轻量", "Light")).tag(MouseSmoothMode.light)
+                Text(IadenteL10n.t("完整惯性", "Full inertia")).tag(MouseSmoothMode.full)
+            }
+            .labelsHidden()
+            .frame(width: 130)
+        }
+
+        IadenteRowDivider()
+
+        IadenteSettingToggle(
+            IadenteL10n.t("侧键互换", "Swap side buttons"),
+            subtitle: IadenteL10n.t(
+                "把鼠标前进 / 后退侧键对调（X1 后退 ↔ X2 前进），适合左撇子或习惯反向的鼠标。",
+                "Swap the mouse forward/back side buttons (X1 back ↔ X2 forward), handy for lefties or reversed mice."),
+            icon: "arrow.left.arrow.right.circle",
+            colors: IadenteTheme.dashboardColors,
+            isOn: Binding(
+                get: { model.config.mouseSideButtonSwap },
+                set: { model.config.mouseSideButtonSwap = $0; model.save() }
+            )
+        )
+
+        IadenteRowDivider()
+
+        IadenteControlRow(
+            IadenteL10n.t("光标加速度", "Cursor acceleration"),
+            subtitle: IadenteL10n.t(
+                "macall 不改系统参数（避免与系统冲突）。点此直接跳到系统鼠标设置，自行调节加速度。",
+                "macall does not touch system parameters (to avoid conflicts). Jump to the system mouse panel to tune acceleration."),
+            icon: "cursorarrow.motionlines",
+            colors: IadenteTheme.dashboardColors
+        ) {
+            Button(IadenteL10n.t("打开系统设置", "Open System Settings")) {
+                Permissions.openMouseSettings()
+            }
+            .controlSize(.small)
+            .buttonStyle(IadenteActionButtonStyle(colors: IadenteTheme.dashboardColors))
+        }
+
+        IadenteNotice(
+            text: IadenteL10n.t(
+                "以上选项默认全部关闭，仅当你打开总开关并勾选某项后才生效。鼠标优化只拦截鼠标事件，触控板滚动照常，互不干扰。需辅助功能 + 输入监控权限。",
+                "All options are off by default and only take effect once the master switch and the item itself are on. Mouse optimization intercepts only mouse events; trackpad scrolling is untouched. Needs Accessibility + Input Monitoring."),
             icon: "info.circle.fill",
             colors: IadenteTheme.dashboardColors
         )

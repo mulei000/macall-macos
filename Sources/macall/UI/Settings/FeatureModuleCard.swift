@@ -240,6 +240,16 @@ enum FeatureCatalog {
                     "Double-tap and hold on the left/right trackpad edge, then drag up/down to adjust brightness/volume — no hotkey, no mouse grab."),
                 hotkeyPrefixes: [])
 
+        // —— 鼠标优化 ——
+        case "mouseOptimize":
+            return FeatureMeta(
+                icon: "mouse.fill",
+                colors: IadenteTheme.dashboardColors,
+                subtitle: IadenteL10n.t(
+                    "鼠标滚轮独立反转、平滑滚动（轻量 / 完整惯性）、侧键互换；只改鼠标、绝不碰触控板，默认全关。光标加速度由系统设置控制。",
+                    "Invert / smooth the mouse wheel (light or full inertia) and swap side buttons — mouse only, never the trackpad, all off by default. Cursor acceleration is set in System Settings."),
+                hotkeyPrefixes: [])
+
         default:
             return FeatureMeta(
                 icon: "circle.fill",
