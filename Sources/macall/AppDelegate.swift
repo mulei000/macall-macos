@@ -179,7 +179,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        maybeShowWelcome()
         checkCriticalPermissions()
 
         NSWorkspace.shared.notificationCenter.addObserver(
@@ -285,14 +284,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 工具箱面板的「工具箱设置」按钮：跳到设置页的「工具箱」标签。
     @objc func showToolsSettings() {
         settingsWindowController?.showSettings(tab: .tools)
-    }
-
-    /// 冷启动后把设置窗口带到最前台，确保用户「看得到」应用已打开
-    /// （菜单栏 app 默认安静驻留、不弹窗，容易被误以为「没打开」）。
-    private func maybeShowWelcome() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
-            self?.showSettings()
-        }
     }
 
     // MARK: - 关键权限自检
