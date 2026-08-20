@@ -220,6 +220,9 @@ final class MouseScrollEngine {
 
     // MARK: - 投递合成事件到目标进程
 
+    /// 目标 PID 无效时是否已打过回退日志（节流，避免每帧刷屏）。
+    private var didLogFallbackPost = false
+
     private func post(v: (y: Double, x: Double)) {
         guard let base = baseEvent, let event = base.copy() else { return }
         MouseScrollEngine.markSynthetic(event)
@@ -232,9 +235,17 @@ final class MouseScrollEngine {
         event.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis2, value: v.x)
         event.setDoubleValueField(.scrollWheelEventPointDeltaAxis1, value: v.y)
         event.setDoubleValueField(.scrollWheelEventPointDeltaAxis2, value: v.x)
-        // 直投目标进程（不重入 tap 链，动量不跟随光标）
         if targetPID > 0 {
+            // 直投目标进程（不重入 tap 链，动量不跟随光标）
             event.postToPid(targetPID)
+        } else {
+            // 兜底：目标 PID 无效（HID 层 tap 等极端情况）时放回事件流由系统路由，
+            // 合成标记（eventSourceUserData）保证不重入自身 tap。
+            if !didLogFallbackPost {
+                didLogFallbackPost = true
+                Log.warning("[mouse][engine] 目标 PID 无效，回退 CGEventPost 投递（平滑仍可用）")
+            }
+            event.post(tap: .cghidEventTap)
         }
     }
 

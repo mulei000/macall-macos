@@ -183,8 +183,11 @@ final class MouseOptimizeFeature: Feature {
         }
 
         guard let tap = CGEvent.tapCreate(
-            tap: .cghidEventTap,
-            place: .headInsertEventTap,
+            // 对齐 MOS：用 session 注释层 + 链尾。HID 层（cghidEventTap）事件刚进系统，
+            // eventTargetUnixProcessID 尚未解析（=0），合成事件将无法 postToPid 直投；
+            // session 注释层事件已带目标进程信息，链尾修改最接近 App 接收点。
+            tap: .cgAnnotatedSessionEventTap,
+            place: .tailAppendEventTap,
             options: .defaultTap,
             eventsOfInterest: mask,
             callback: callback,
