@@ -12,7 +12,7 @@ RESOURCES="$APP_PATH/Contents/Resources"
 DESKTOP="$HOME/Desktop"
 
 APP_VERSION_NUM="0.5.0"
-APP_BUILD=140
+APP_BUILD=141
 
 # 优先使用 WorkBuddy 管理的 Swift 工具链，否则回退到系统 swiftc。
 SWIFT_BIN="swiftc"
@@ -35,7 +35,7 @@ echo "==> 编译主程序源文件 (swiftc)…"
     -framework Combine -framework UserNotifications -framework ServiceManagement \
     -framework ScreenCaptureKit -framework AVFoundation -framework CoreMedia \
     -framework CoreAudio -framework ImageIO -framework UniformTypeIdentifiers \
-    -framework Vision -framework CryptoKit \
+    -framework Vision -framework CryptoKit -framework CoreVideo \
     -I Sources/macall/SMC \
     -import-objc-header Sources/macall/SMC/smc_bridge.h \
     -o "$BIN" \

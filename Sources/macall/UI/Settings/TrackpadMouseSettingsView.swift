@@ -187,8 +187,8 @@ struct TrackpadMouseSettingsView: View {
         IadenteSettingToggle(
             IadenteL10n.t("平滑滚动", "Smooth scrolling"),
             subtitle: IadenteL10n.t(
-                "带惯性滑行尾迹的参数化平滑引擎（类似触控板的减速过程）。下方可微调最短步长 / 速度增益 / 平滑时长。",
-                "A parametrised inertial smoothing engine (like the trackpad's deceleration glide). Tune min step / speed gain / smoothing duration below."),
+                "MOS 同款平滑引擎（方向感知累积 + 指数缓动 + 曲线滤波，CVDisplayLink 帧同步）。下方可微调步长 / 速度 / 时长。",
+                "The MOS smoothing engine (direction-aware accumulation + exponential easing + curve filtering, display-link synced). Tune step / speed / duration below."),
             icon: "waveform.path",
             colors: IadenteTheme.dashboardColors,
             isOn: Binding(
@@ -199,63 +199,60 @@ struct TrackpadMouseSettingsView: View {
 
         // —— 高级（仅平滑开启时才有意义，但仍可预设）——
         IadenteControlRow(
-            IadenteL10n.t("最短步长", "Min step"),
+            IadenteL10n.t("滚动步长", "Step"),
             subtitle: IadenteL10n.t(
-                "小于该幅度的微动先累积、超过才刷新，用来滤掉生硬的小跳变；默认 1.0。",
-                "Ticks smaller than this accumulate first, then flush — filters out tiny jitters; default 1.0."),
+                "低于该幅度的滚轮 tick 归一抬到该值（去抖 + 提速）。默认 33.6，与 MOS 一致。",
+                "Wheel ticks below this magnitude are raised to it (de-jitter + speed). Default 33.6, same as MOS."),
             icon: "ruler",
             colors: IadenteTheme.dashboardColors
         ) {
             HStack(spacing: 6) {
-                TextField("", value: minStepBinding, format: .number.precision(.fractionLength(1)))
+                TextField("", value: stepBinding, format: .number.precision(.fractionLength(1)))
                     .textFieldStyle(.roundedBorder)
                     .multilineTextAlignment(.trailing)
                     .frame(width: 52)
-                Stepper("", value: minStepBinding, in: 0.1...5, step: 0.1)
+                Stepper("", value: stepBinding, in: 1...100, step: 0.1)
                     .labelsHidden()
             }
             .frame(width: 120)
         }
 
         IadenteControlRow(
-            IadenteL10n.t("速度增益", "Speed gain"),
+            IadenteL10n.t("滚动速度", "Speed"),
             subtitle: IadenteL10n.t(
-                "滚轮速度整体倍率：1 = 原速，>1 更快，<1 更慢；默认 1.0。",
-                "Overall wheel-speed multiplier: 1 = native, >1 faster, <1 slower; default 1.0."),
+                "滚轮速度整体倍率：1 = 原速，>1 更快，<1 更慢；默认 2.70，与 MOS 一致。",
+                "Overall wheel-speed multiplier: 1 = native, >1 faster, <1 slower; default 2.70, same as MOS."),
             icon: "gauge",
             colors: IadenteTheme.dashboardColors
         ) {
             HStack(spacing: 6) {
-                TextField("", value: speedGainBinding, format: .number.precision(.fractionLength(2)))
+                TextField("", value: speedBinding, format: .number.precision(.fractionLength(2)))
                     .textFieldStyle(.roundedBorder)
                     .multilineTextAlignment(.trailing)
                     .frame(width: 52)
-                Stepper("", value: speedGainBinding, in: 0.5...10, step: 0.1)
+                Stepper("", value: speedBinding, in: 0.1...10, step: 0.1)
                     .labelsHidden()
             }
             .frame(width: 120)
         }
 
         IadenteControlRow(
-            IadenteL10n.t("平滑时长", "Smoothing duration"),
+            IadenteL10n.t("滚动时长", "Duration"),
             subtitle: IadenteL10n.t(
-                "惯性滑行尾迹持续的时间（秒）：越大越顺滑、滑行越久；默认 0.18。",
-                "How long the inertial glide lasts (seconds): larger = smoother & longer glide; default 0.18."),
+                "指数缓动时长参数：越大越顺滑、惯性滑行越久；默认 4.35，与 MOS 一致。",
+                "Exponential-ease duration: larger = smoother & longer glide; default 4.35, same as MOS."),
             icon: "timer",
             colors: IadenteTheme.dashboardColors
         ) {
             HStack(spacing: 6) {
-                TextField("", value: smoothDurationBinding, format: .number.precision(.fractionLength(2)))
+                TextField("", value: durationBinding, format: .number.precision(.fractionLength(2)))
                     .textFieldStyle(.roundedBorder)
                     .multilineTextAlignment(.trailing)
                     .frame(width: 52)
-                Text("s")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                Stepper("", value: smoothDurationBinding, in: 0.05...0.6, step: 0.01)
+                Stepper("", value: durationBinding, in: 0.1...8, step: 0.05)
                     .labelsHidden()
             }
-            .frame(width: 130)
+            .frame(width: 120)
         }
 
         IadenteRowDivider()
@@ -431,34 +428,34 @@ struct TrackpadMouseSettingsView: View {
         )
     }
 
-    private var minStepBinding: Binding<Double> {
+    private var stepBinding: Binding<Double> {
         Binding(
-            get: { model.config.mouseMinStep },
+            get: { model.config.mouseScrollStep },
             set: { v in
                 guard v.isFinite, v > 0 else { return }
-                model.config.mouseMinStep = min(5, max(0.1, (v * 10).rounded() / 10))
+                model.config.mouseScrollStep = min(100, max(1, (v * 10).rounded() / 10))
                 model.save()
             }
         )
     }
 
-    private var speedGainBinding: Binding<Double> {
+    private var speedBinding: Binding<Double> {
         Binding(
-            get: { model.config.mouseSpeedGain },
+            get: { model.config.mouseScrollSpeed },
             set: { v in
                 guard v.isFinite, v > 0 else { return }
-                model.config.mouseSpeedGain = min(10, max(0.5, (v * 100).rounded() / 100))
+                model.config.mouseScrollSpeed = min(10, max(0.1, (v * 100).rounded() / 100))
                 model.save()
             }
         )
     }
 
-    private var smoothDurationBinding: Binding<Double> {
+    private var durationBinding: Binding<Double> {
         Binding(
-            get: { model.config.mouseSmoothDuration },
+            get: { model.config.mouseScrollDuration },
             set: { v in
                 guard v.isFinite, v > 0 else { return }
-                model.config.mouseSmoothDuration = min(0.6, max(0.05, (v * 100).rounded() / 100))
+                model.config.mouseScrollDuration = min(8, max(0.1, (v * 100).rounded() / 100))
                 model.save()
             }
         )

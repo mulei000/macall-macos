@@ -189,12 +189,12 @@ struct Configuration: Codable {
     var mouseScrollInvert: Bool = false
     /// 鼠标优化 - 平滑滚动（参数化惯性引擎，替代旧版 light/full 二选一）。默认 false。
     var mouseSmoothScroll: Bool = false
-    /// 鼠标优化 - 最短步长：小于该幅度的微动 tick 先累积、超过才刷新（滤抖 / 合并细碎滚动）。
-    var mouseMinStep: Double = 1.0
-    /// 鼠标优化 - 速度增益：滚轮速度整体倍率（1=原速，越大越快）。
-    var mouseSpeedGain: Double = 1.0
-    /// 鼠标优化 - 平滑时长（秒）：惯性滑行尾迹的持续时间，越大越顺滑、滑行越久。
-    var mouseSmoothDuration: Double = 0.18
+    /// 鼠标优化 - 滚动步长（MOS step）：低于该幅度的 tick 归一抬到该值（去抖 + 提速），默认 33.6（与 MOS 一致）。
+    var mouseScrollStep: Double = 33.6
+    /// 鼠标优化 - 滚动速度倍率（MOS speed）：能量累积的倍率，默认 2.70（与 MOS 一致）。
+    var mouseScrollSpeed: Double = 2.70
+    /// 鼠标优化 - 滚动时长（MOS duration）：指数缓动参数，越大越顺滑、滑行越久；默认 4.35（与 MOS 一致）。
+    var mouseScrollDuration: Double = 4.35
     /// 鼠标优化 - 侧键 X1（后退键）绑定的 macall 动作；none = 透传。
     var mouseSideAction1: MouseSideAction = .none
     /// 鼠标优化 - 侧键 X2（前进键）绑定的 macall 动作；none = 透传。
@@ -441,7 +441,7 @@ struct Configuration: Codable {
         case enabled, gap, monitorShowPercentage, enabledFeatures, enabledHotkeys, hotkeys, previewEnabled, outputDeviceUIDs, perAppVolume, perAppMuted, perAppDeviceUIDs, autoRouteOutput, devicePriority, outputSwitcherDeviceUIDs, dockToggleBehavior, edgeSnapSelectorEnabled, edgeSnapLeftLayout, edgeSnapRightLayout
         case hiddenAudioApps, hiddenAudioAppNames, audioDeviceOrder, hiddenAudioDevices
         case clipboardMaxItems, clipboardRetentionDays, clipboardKeepImages, clipboardKeepFiles, magnifierZoom, maxTemporaryScenes, defaultInputDeviceUID, systemSoundOutputDeviceUID, autoDuckOnHeadphoneUnplug, autoDuckTargetVolume, touchpadSensitivity, touchpadStartZone, touchpadMinTravel, touchpadLeftAction, touchpadRightAction, touchpadHaptic
-        case mouseScrollInvert, mouseSmoothScroll, mouseMinStep, mouseSpeedGain, mouseSmoothDuration, mouseSideAction1, mouseSideAction2, mouseAppOverrides
+        case mouseScrollInvert, mouseSmoothScroll, mouseScrollStep, mouseScrollSpeed, mouseScrollDuration, mouseSideAction1, mouseSideAction2, mouseAppOverrides
     }
 
     init(from d: Decoder) throws {
@@ -486,9 +486,9 @@ struct Configuration: Codable {
         touchpadHaptic = try c.decodeIfPresent(Bool.self, forKey: .touchpadHaptic) ?? true
         mouseScrollInvert = try c.decodeIfPresent(Bool.self, forKey: .mouseScrollInvert) ?? false
         mouseSmoothScroll = try c.decodeIfPresent(Bool.self, forKey: .mouseSmoothScroll) ?? false
-        mouseMinStep = try c.decodeIfPresent(Double.self, forKey: .mouseMinStep) ?? 1.0
-        mouseSpeedGain = try c.decodeIfPresent(Double.self, forKey: .mouseSpeedGain) ?? 1.0
-        mouseSmoothDuration = try c.decodeIfPresent(Double.self, forKey: .mouseSmoothDuration) ?? 0.18
+        mouseScrollStep = try c.decodeIfPresent(Double.self, forKey: .mouseScrollStep) ?? 33.6
+        mouseScrollSpeed = try c.decodeIfPresent(Double.self, forKey: .mouseScrollSpeed) ?? 2.70
+        mouseScrollDuration = try c.decodeIfPresent(Double.self, forKey: .mouseScrollDuration) ?? 4.35
         mouseSideAction1 = try c.decodeIfPresent(MouseSideAction.self, forKey: .mouseSideAction1) ?? .none
         mouseSideAction2 = try c.decodeIfPresent(MouseSideAction.self, forKey: .mouseSideAction2) ?? .none
         mouseAppOverrides = try c.decodeIfPresent([String: MouseAppOverride].self, forKey: .mouseAppOverrides) ?? [:]
@@ -536,9 +536,9 @@ struct Configuration: Codable {
         try c.encode(touchpadHaptic, forKey: .touchpadHaptic)
         try c.encode(mouseScrollInvert, forKey: .mouseScrollInvert)
         try c.encode(mouseSmoothScroll, forKey: .mouseSmoothScroll)
-        try c.encode(mouseMinStep, forKey: .mouseMinStep)
-        try c.encode(mouseSpeedGain, forKey: .mouseSpeedGain)
-        try c.encode(mouseSmoothDuration, forKey: .mouseSmoothDuration)
+        try c.encode(mouseScrollStep, forKey: .mouseScrollStep)
+        try c.encode(mouseScrollSpeed, forKey: .mouseScrollSpeed)
+        try c.encode(mouseScrollDuration, forKey: .mouseScrollDuration)
         try c.encode(mouseSideAction1, forKey: .mouseSideAction1)
         try c.encode(mouseSideAction2, forKey: .mouseSideAction2)
         try c.encode(mouseAppOverrides, forKey: .mouseAppOverrides)
