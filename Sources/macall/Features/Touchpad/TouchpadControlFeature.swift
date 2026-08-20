@@ -33,7 +33,7 @@ import Foundation
 
 final class TouchpadControlFeature: Feature {
     let id = "touchpadControl"
-    var title: String { IadenteL10n.t("触控板手势调节", "Trackpad Gesture Control") }
+    var title: String { IadenteL10n.t("触控板调节亮度/音量", "Trackpad Brightness/Volume") }
     var category: FeatureCategory { .system }
     var enabledByDefault: Bool { false }
 

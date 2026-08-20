@@ -52,6 +52,8 @@ final class MouseOptimizeFeature: Feature {
     private var isEmitting = false
     /// 合成惯性事件打标，避免 tap 回调递归处理自己发出的事件。
     private let synthSource: CGEventSource? = CGEventSource(stateID: .combinedSessionState)
+    /// 当前已建 tap 的 mask 是否包含侧键（otherMouseDown）。侧键绑定增删时需据此重建 tap。
+    private var sideMaskActive = false
 
     // MARK: - Feature
 
@@ -91,11 +93,23 @@ final class MouseOptimizeFeature: Feature {
          config.mouseSideAction2 != .none)
     }
 
-    /// 按门控同步 tap：需要且未建 → 建；不需要且已建 → 拆。
+    /// 是否需要监听侧键（只有绑了动作才需要 otherMouseDown，也就只需「输入监控」权限）。
+    private func needsSideMask() -> Bool {
+        config.mouseSideAction1 != .none || config.mouseSideAction2 != .none
+    }
+
+    /// 按门控同步 tap：需要且未建 → 建；不需要且已建 → 拆；
+    /// 已建但监听的事件类型变了（侧键绑定增删）→ 重建以更新 mask。
     private func syncTap() {
-        if wantsActive(), tap == nil {
-            installTap()
-        } else if !wantsActive(), tap != nil {
+        if wantsActive() {
+            if tap == nil {
+                installTap()
+            } else if sideMaskActive != needsSideMask() {
+                teardownTap()
+                stopMomentum()
+                installTap()
+            }
+        } else if tap != nil {
             teardownTap()
             stopMomentum()
         }
@@ -104,10 +118,14 @@ final class MouseOptimizeFeature: Feature {
     // MARK: - 权限
 
     private func ensurePermission() -> Bool {
-        let ax = Permissions.isAccessibilityWorking()
-        let input = Permissions.inputMonitoringGranted
-        guard ax, input else {
-            Log.warning("[mouse] 缺少权限（辅助功能=\(ax) 输入监控=\(input)），暂不创建滚轮 tap，事件将透传")
+        guard Permissions.isAccessibilityWorking() else {
+            Log.warning("[mouse] 缺少辅助功能权限，暂不创建鼠标拦截 tap，事件将透传")
+            return false
+        }
+        // 仅滚轮反转 / 平滑只需要辅助功能即可；只有绑定了侧键（要拦截 otherMouseDown）
+        // 才需要「输入监控」。避免用户没开输入监控就连滚轮都用不了。
+        if needsSideMask(), !Permissions.inputMonitoringGranted {
+            Log.warning("[mouse] 侧键绑定需要「输入监控」权限，暂不创建拦截 tap，事件将透传")
             return false
         }
         return true
@@ -119,11 +137,16 @@ final class MouseOptimizeFeature: Feature {
         guard tap == nil else { return }
         guard ensurePermission() else { return }
 
-        // 监听：滚轮 + 侧键按下（抬起不必拦截，按下即派发一次即可）。
+        // 监听：滚轮必监听；侧键（otherMouseDown）仅在绑定了动作时才纳入，
+        // 这样「仅滚轮」场景只需辅助功能、不必要求输入监控。
+        let wantSide = needsSideMask()
         var rawMask: UInt64 = 0
         rawMask |= UInt64(1) << CGEventType.scrollWheel.rawValue
-        rawMask |= UInt64(1) << CGEventType.otherMouseDown.rawValue
+        if wantSide {
+            rawMask |= UInt64(1) << CGEventType.otherMouseDown.rawValue
+        }
         let mask: CGEventMask = rawMask
+        sideMaskActive = wantSide
 
         let callback: CGEventTapCallBack = { _, type, event, userInfo in
             guard let userInfo else {
@@ -298,6 +321,10 @@ final class MouseOptimizeFeature: Feature {
         guard tap != nil else { return }
         guard let synth = CGEvent(source: synthSource) else { return }
         synth.type = .scrollWheel
+        // 标记为「连续事件」：合成事件会重新进入同一个 tap，靠这个标记在回调里
+        // 直接放行（guard isContinuous == 0 不成立），既避免递归平滑死循环，
+        // 又让事件照常送达 App。
+        synth.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
         synth.setIntegerValueField(.scrollWheelEventDeltaAxis1, value: Int64(v.rounded()))
         synth.setIntegerValueField(.scrollWheelEventDeltaAxis2, value: Int64(h.rounded()))
         synth.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1, value: v)

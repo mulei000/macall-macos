@@ -236,8 +236,8 @@ enum FeatureCatalog {
                 icon: "hand.tap.fill",
                 colors: IadenteTheme.dashboardColors,
                 subtitle: IadenteL10n.t(
-                    "在触控板左右边缘「双击并保持」，上下拖动即可调亮度 / 音量；无需快捷键，也不抢鼠标。",
-                    "Double-tap and hold on the left/right trackpad edge, then drag up/down to adjust brightness/volume — no hotkey, no mouse grab."),
+                    "手指从触控板最左 / 最右缘滑入并向内拖动锁定，之后上下移动即可调亮度 / 音量；无需快捷键，也不抢鼠标。",
+                    "Swipe in from the left/right trackpad edge and drag inward to lock, then move up/down to adjust brightness/volume — no hotkey, no mouse grab."),
                 hotkeyPrefixes: [])
 
         // —— 鼠标优化 ——
