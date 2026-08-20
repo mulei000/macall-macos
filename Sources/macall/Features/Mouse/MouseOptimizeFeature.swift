@@ -1,12 +1,11 @@
 import AppKit
-import ApplicationServices
 import CoreGraphics
 import Foundation
 
-// MARK: - 鼠标优化（滚轮反转 / 平滑滚动 / 侧键绑定 / 逐 App 例外）
+// MARK: - 鼠标优化（滚轮反转 / 平滑滚动）
 //
-// 思路参考开源的 Mos / SmoothMouse / MouseBridge：用单个 CGEventTap 拦截鼠标
-// 滚轮（scrollWheel）与侧键（otherMouseDown），按子开关做轻量改写。
+// 思路参考开源的 Mos / SmoothMouse：用单个 CGEventTap 拦截鼠标滚轮
+// （scrollWheel），按子开关做轻量改写。
 //
 // 关键隔离设计（满足「默认全关、不影响其它功能」）：
 //   · 单个功能 ↔ 单个 tap：install 时只建一次，uninstall 时彻底拆除并放行所有事件；
@@ -15,8 +14,8 @@ import Foundation
 //   · 鼠标 / 触控板分流：按 MOS 的触控板判定（scrollPhase / momentumPhase /
 //     scrollCount 任一非零即触控板）——比旧的 `isContinuous` 判定可靠：
 //     罗技等鼠标也发 isContinuous=1，旧判定会漏判；触控板事件一律原样放行，绝不串味；
-//   · 默认全部子开关关闭（mouseScrollInvert / mouseSmoothScroll 均 false，
-//     侧键绑定均为 none），即使用户开着总开关也完全不改滚动行为；
+//   · 默认全部子开关关闭（mouseScrollInvert / mouseSmoothScroll 均 false），
+//     即使用户开着总开关也完全不改滚动行为；
 //   · 失败即 fail-closed：权限不足 / tap 创建失败 / 帧驱动不可用时只记日志、
 //     不抛异常、不拦事件，其它功能（快捷键、分屏等）照常工作；
 //   · 光标加速度：本功能**不**改系统参数，只提供「打开系统鼠标设置」按钮
@@ -28,9 +27,9 @@ import Foundation
 // 帧同步 + 合成事件标记（eventSourceUserData = 0x4D4F53534D4F4F54）防递归 +
 // CGEventPostToPid 直投目标进程。
 //
-// 事件流：tap 收到真实滚轮 tick → 跳过合成事件 / 触控板放行 → 按逐 App 覆盖计算
-// 有效反转与平滑 → 提取可用 delta（点 > 定点 > 整数）→ 反转 → step 归一 →
-// 喂给 MouseScrollEngine（引擎按帧合成投递）。不平滑时仅（可能）反转原样透传。
+// 事件流：tap 收到真实滚轮 tick → 跳过合成事件 / 触控板放行 → 计算有效反转与
+// 平滑 → 提取可用 delta（点 > 定点 > 整数）→ 反转 → step 归一 → 喂给
+// MouseScrollEngine（引擎按帧合成投递）。不平滑时仅（可能）反转原样透传。
 
 final class MouseOptimizeFeature: Feature {
     let id = "mouseOptimize"
@@ -40,7 +39,6 @@ final class MouseOptimizeFeature: Feature {
 
     static var shared: MouseOptimizeFeature?
 
-    private var context: AppContext?
     private var config: Configuration = Configuration()
 
     /// MOS 风格平滑滚动引擎（clean-room 移植）。
@@ -51,13 +49,9 @@ final class MouseOptimizeFeature: Feature {
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
 
-    /// 当前已建 tap 的 mask 是否包含侧键（otherMouseDown）。侧键绑定增删时需据此重建 tap。
-    private var sideMaskActive = false
-
     // MARK: - Feature
 
     func install(context: AppContext) {
-        self.context = context
         self.config = context.config
         Self.shared = self
         syncEngineConfig()
@@ -98,26 +92,13 @@ final class MouseOptimizeFeature: Feature {
     /// 是否真正需要拦截：总开关开 且 至少一个子功能开。
     private func wantsActive() -> Bool {
         config.isFeatureEnabled(id, default: enabledByDefault) &&
-        (config.mouseScrollInvert ||
-         config.mouseSmoothScroll ||
-         config.mouseSideAction1 != .none ||
-         config.mouseSideAction2 != .none)
+        (config.mouseScrollInvert || config.mouseSmoothScroll)
     }
 
-    /// 是否需要监听侧键（只有绑了动作才需要 otherMouseDown，也就只需「输入监控」权限）。
-    private func needsSideMask() -> Bool {
-        config.mouseSideAction1 != .none || config.mouseSideAction2 != .none
-    }
-
-    /// 按门控同步 tap：需要且未建 → 建；不需要且已建 → 拆；
-    /// 已建但监听的事件类型变了（侧键绑定增删）→ 重建以更新 mask。
+    /// 按门控同步 tap：需要且未建 → 建；不需要且已建 → 拆。
     private func syncTap() {
         if wantsActive() {
             if tap == nil {
-                installTap()
-            } else if sideMaskActive != needsSideMask() {
-                teardownTap()
-                scrollEngine.reset()
                 installTap()
             }
         } else if tap != nil {
@@ -133,12 +114,6 @@ final class MouseOptimizeFeature: Feature {
             Log.warning("[mouse] 缺少辅助功能权限，暂不创建鼠标拦截 tap，事件将透传")
             return false
         }
-        // 仅滚轮反转 / 平滑只需要辅助功能即可；只有绑定了侧键（要拦截 otherMouseDown）
-        // 才需要「输入监控」。避免用户没开输入监控就连滚轮都用不了。
-        if needsSideMask(), !Permissions.inputMonitoringGranted {
-            Log.warning("[mouse] 侧键绑定需要「输入监控」权限，暂不创建拦截 tap，事件将透传")
-            return false
-        }
         return true
     }
 
@@ -148,16 +123,8 @@ final class MouseOptimizeFeature: Feature {
         guard tap == nil else { return }
         guard ensurePermission() else { return }
 
-        // 监听：滚轮必监听；侧键（otherMouseDown）仅在绑定了动作时才纳入，
-        // 这样「仅滚轮」场景只需辅助功能、不必要求输入监控。
-        let wantSide = needsSideMask()
-        var rawMask: UInt64 = 0
-        rawMask |= UInt64(1) << CGEventType.scrollWheel.rawValue
-        if wantSide {
-            rawMask |= UInt64(1) << CGEventType.otherMouseDown.rawValue
-        }
-        let mask: CGEventMask = rawMask
-        sideMaskActive = wantSide
+        // 只监听滚轮（不拦侧键；inputMonitoring 不需要，仅辅助功能即可）。
+        let mask: CGEventMask = CGEventMask(1 << CGEventType.scrollWheel.rawValue)
 
         let callback: CGEventTapCallBack = { _, type, event, userInfo in
             guard let userInfo else {
@@ -172,14 +139,10 @@ final class MouseOptimizeFeature: Feature {
             if MouseScrollEngine.isSynthetic(event) {
                 return Unmanaged.passRetained(event)
             }
-            switch type {
-            case .scrollWheel:
+            if type == .scrollWheel {
                 return f.handleScroll(event)
-            case .otherMouseDown:
-                return f.handleSideButton(event)
-            default:
-                return Unmanaged.passRetained(event)
             }
+            return Unmanaged.passRetained(event)
         }
 
         guard let tap = CGEvent.tapCreate(
@@ -200,7 +163,7 @@ final class MouseOptimizeFeature: Feature {
         runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
         CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
-        Log.info("[mouse] 鼠标拦截 tap 已创建并启用（滚轮 + 侧键）")
+        Log.info("[mouse] 鼠标拦截 tap 已创建并启用（滚轮）")
     }
 
     private func teardownTap() {
@@ -224,20 +187,6 @@ final class MouseOptimizeFeature: Feature {
             return Unmanaged.passRetained(event)
         }
 
-        // 当前前台 App 的 bundleID（用于逐 App 例外）。
-        let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
-
-        // 计算该 App 的有效开关（全局 + 逐 App 三态覆盖）。
-        let override = config.mouseAppOverrides[bundleID]
-        var effSmooth = config.mouseSmoothScroll
-        var effInvert = config.mouseScrollInvert
-        if let override {
-            switch override {
-            case .smooth:    effSmooth = true
-            case .invert:    effInvert = true
-            }
-        }
-
         // 提取可用 delta（MOS 取法：点 > 定点 > 整数，取首个非零者）。
         let uy = Self.usableDelta(event, axis: 1)
         let ux = Self.usableDelta(event, axis: 2)
@@ -245,12 +194,12 @@ final class MouseOptimizeFeature: Feature {
             return Unmanaged.passRetained(event)
         }
 
-        // 反转（逐 App 有效反转）。
-        let sy = effInvert ? -uy : uy
-        let sx = effInvert ? -ux : ux
+        // 反转。
+        let sy = config.mouseScrollInvert ? -uy : uy
+        let sx = config.mouseScrollInvert ? -ux : ux
 
         // 平滑：step 归一后喂给引擎，吃掉原事件；引擎按帧合成投递。
-        if effSmooth {
+        if config.mouseSmoothScroll {
             let ty = Self.normalizeToStep(sy, step: config.mouseScrollStep)
             let tx = Self.normalizeToStep(sx, step: config.mouseScrollStep)
             let pid = pid_t(event.getIntegerValueField(.eventTargetUnixProcessID))
@@ -260,14 +209,14 @@ final class MouseOptimizeFeature: Feature {
             }
             // 引擎不可用（CVDisplayLink 失败）：fail-closed，原样透传（已含反转）。
             Log.warning("[mouse] 平滑引擎不可用，退回透传")
-            if effInvert {
+            if config.mouseScrollInvert {
                 Self.setAllDeltas(event, y: sy, x: sx)
             }
             return Unmanaged.passRetained(event)
         }
 
         // 不平滑：仅（可能）反转，原样返回事件。
-        if effInvert {
+        if config.mouseScrollInvert {
             Self.setAllDeltas(event, y: sy, x: sx)
         }
         return Unmanaged.passRetained(event)
@@ -325,30 +274,5 @@ final class MouseOptimizeFeature: Feature {
         event.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis2, value: x)
         event.setDoubleValueField(.scrollWheelEventPointDeltaAxis1, value: y)
         event.setDoubleValueField(.scrollWheelEventPointDeltaAxis2, value: x)
-    }
-
-    // MARK: - 侧键处理（绑定 macall 动作）
-
-    /// 侧键（X1=3 / X2=4）绑定 macall 动作：命中即派发，等价于按了对应快捷键；
-    /// 派发成功则吃掉该侧键事件（避免 App 自己的前进/后退也触发）。未绑定则原样透传。
-    private func handleSideButton(_ event: CGEvent) -> Unmanaged<CGEvent>? {
-        let btn = event.getIntegerValueField(.mouseEventButtonNumber)
-        let action: MouseSideAction? = (btn == 3) ? config.mouseSideAction1
-                               : (btn == 4) ? config.mouseSideAction2
-                               : nil
-        // [诊断] 无条件记录：原始按键号、解析到的绑定、是否命中（诉求 B 排查）。
-        Log.info("[mouse][diag] 侧键事件 buttonNumber=\(btn) 解析动作=\(action?.rawValue ?? "nil") 命中=\(action != nil && action != MouseSideAction.none)")
-        guard let action, action != MouseSideAction.none, let target = action.target else {
-            return Unmanaged.passRetained(event)
-        }
-        // 派发走全局 FeatureRegistry（与快捷键同一路径），不合成键盘事件。
-        // registry 未就绪时退回透传，避免白白吃掉点击。
-        if let registry = context?.hotkeys.registry {
-            registry.dispatch(featureId: target.feature, action: target.action)
-            Log.info("[mouse] 侧键 \(btn == 3 ? "X1" : "X2") → 派发 \(target.feature)/\(target.action)")
-            return nil
-        }
-        Log.warning("[mouse][diag] 侧键命中但 registry 未就绪，退回透传 buttonNumber=\(btn)")
-        return Unmanaged.passRetained(event)
     }
 }

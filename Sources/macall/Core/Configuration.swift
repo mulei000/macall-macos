@@ -21,74 +21,6 @@ enum TouchpadEdgeAction: String, Codable, CaseIterable {
     case off         // 该边缘不触发
 }
 
-/// 鼠标侧键（X1 / X2）可绑定的 macall 动作。选中后由 MouseOptimizeFeature 内部派发，
-/// 走与全局快捷键相同的 `FeatureRegistry.dispatch(featureID:action:)` 路径，不合成键盘事件。
-enum MouseSideAction: String, Codable, CaseIterable {
-    case none
-    case volumeMute
-    case alwaysOnTop
-    case magnifierToggle
-    case displaySleep
-    case lock
-    case darkMode
-    case switcher
-    case clipboard
-    case snippets
-    case colorpicker
-    case ddcBrightUp
-    case ddcBrightDown
-
-    var title: String {
-        switch self {
-        case .none:           return IadenteL10n.t("无（透传）", "None (pass through)")
-        case .volumeMute:     return IadenteL10n.t("静音切换", "Toggle mute")
-        case .alwaysOnTop:    return IadenteL10n.t("窗口置顶", "Always on top")
-        case .magnifierToggle:return IadenteL10n.t("屏幕放大镜", "Magnifier")
-        case .displaySleep:   return IadenteL10n.t("熄屏", "Display sleep")
-        case .lock:           return IadenteL10n.t("锁屏", "Lock screen")
-        case .darkMode:       return IadenteL10n.t("深色模式", "Dark mode")
-        case .switcher:       return IadenteL10n.t("窗口切换", "Window switcher")
-        case .clipboard:      return IadenteL10n.t("剪贴板", "Clipboard")
-        case .snippets:       return IadenteL10n.t("文字片段", "Snippets")
-        case .colorpicker:    return IadenteL10n.t("屏幕取色", "Color picker")
-        case .ddcBrightUp:    return IadenteL10n.t("显示器调亮", "Monitor brighter")
-        case .ddcBrightDown:  return IadenteL10n.t("显示器调暗", "Monitor dimmer")
-        }
-    }
-
-    /// 派发目标（feature id, action key）；none 返回 nil。
-    var target: (feature: String, action: String)? {
-        switch self {
-        case .none:            return nil
-        case .volumeMute:      return ("volume", "volume.mute")
-        case .alwaysOnTop:     return ("alwaysontop", "alwaysontop.toggle")
-        case .magnifierToggle: return ("magnifier", "magnifier.toggle")
-        case .displaySleep:    return ("power", "power.displaySleep")
-        case .lock:            return ("power", "power.lock")
-        case .darkMode:        return ("power", "power.toggleDark")
-        case .switcher:        return ("switcher", "switcher.show")
-        case .clipboard:       return ("clipboard", "clipboard.show")
-        case .snippets:        return ("snippets", "snippets.show")
-        case .colorpicker:     return ("colorpicker", "colorpicker.pick")
-        case .ddcBrightUp:     return ("ddc", "ddc.brightnessUp")
-        case .ddcBrightDown:   return ("ddc", "ddc.brightnessDown")
-        }
-    }
-}
-
-/// 逐 App 例外（Mos 式两态）：对某个 App 单独覆盖全局鼠标优化行为。
-enum MouseAppOverride: String, Codable, CaseIterable {
-    case smooth     // 该 App：强制平滑（忽略全局平滑开关，强制开）
-    case invert     // 该 App：强制反转（忽略全局反转开关，强制开）
-
-    var title: String {
-        switch self {
-        case .smooth:    return IadenteL10n.t("强制平滑", "Force smooth")
-        case .invert:    return IadenteL10n.t("强制反转", "Force invert")
-        }
-    }
-}
-
 /// 全局配置。保存到 `~/.config/macall/config.json`，对新旧字段容错。
 struct Configuration: Codable {
     /// 全局总开关（关闭后所有快捷键透传）。
@@ -195,12 +127,6 @@ struct Configuration: Codable {
     var mouseScrollSpeed: Double = 2.70
     /// 鼠标优化 - 滚动时长（MOS duration）：指数缓动参数，越大越顺滑、滑行越久；默认 4.35（与 MOS 一致）。
     var mouseScrollDuration: Double = 4.35
-    /// 鼠标优化 - 侧键 X1（后退键）绑定的 macall 动作；none = 透传。
-    var mouseSideAction1: MouseSideAction = .none
-    /// 鼠标优化 - 侧键 X2（前进键）绑定的 macall 动作；none = 透传。
-    var mouseSideAction2: MouseSideAction = .none
-    /// 鼠标优化 - 逐 App 例外：bundleID → 三态覆盖（白名单 / 强制平滑 / 强制反转）。
-    var mouseAppOverrides: [String: MouseAppOverride] = [:]
 
     init() {}
 
@@ -441,7 +367,7 @@ struct Configuration: Codable {
         case enabled, gap, monitorShowPercentage, enabledFeatures, enabledHotkeys, hotkeys, previewEnabled, outputDeviceUIDs, perAppVolume, perAppMuted, perAppDeviceUIDs, autoRouteOutput, devicePriority, outputSwitcherDeviceUIDs, dockToggleBehavior, edgeSnapSelectorEnabled, edgeSnapLeftLayout, edgeSnapRightLayout
         case hiddenAudioApps, hiddenAudioAppNames, audioDeviceOrder, hiddenAudioDevices
         case clipboardMaxItems, clipboardRetentionDays, clipboardKeepImages, clipboardKeepFiles, magnifierZoom, maxTemporaryScenes, defaultInputDeviceUID, systemSoundOutputDeviceUID, autoDuckOnHeadphoneUnplug, autoDuckTargetVolume, touchpadSensitivity, touchpadStartZone, touchpadMinTravel, touchpadLeftAction, touchpadRightAction, touchpadHaptic
-        case mouseScrollInvert, mouseSmoothScroll, mouseScrollStep, mouseScrollSpeed, mouseScrollDuration, mouseSideAction1, mouseSideAction2, mouseAppOverrides
+        case mouseScrollInvert, mouseSmoothScroll, mouseScrollStep, mouseScrollSpeed, mouseScrollDuration
     }
 
     init(from d: Decoder) throws {
@@ -489,9 +415,6 @@ struct Configuration: Codable {
         mouseScrollStep = try c.decodeIfPresent(Double.self, forKey: .mouseScrollStep) ?? 33.6
         mouseScrollSpeed = try c.decodeIfPresent(Double.self, forKey: .mouseScrollSpeed) ?? 2.70
         mouseScrollDuration = try c.decodeIfPresent(Double.self, forKey: .mouseScrollDuration) ?? 4.35
-        mouseSideAction1 = try c.decodeIfPresent(MouseSideAction.self, forKey: .mouseSideAction1) ?? .none
-        mouseSideAction2 = try c.decodeIfPresent(MouseSideAction.self, forKey: .mouseSideAction2) ?? .none
-        mouseAppOverrides = try c.decodeIfPresent([String: MouseAppOverride].self, forKey: .mouseAppOverrides) ?? [:]
     }
 
     func encode(to e: Encoder) throws {
@@ -539,8 +462,5 @@ struct Configuration: Codable {
         try c.encode(mouseScrollStep, forKey: .mouseScrollStep)
         try c.encode(mouseScrollSpeed, forKey: .mouseScrollSpeed)
         try c.encode(mouseScrollDuration, forKey: .mouseScrollDuration)
-        try c.encode(mouseSideAction1, forKey: .mouseSideAction1)
-        try c.encode(mouseSideAction2, forKey: .mouseSideAction2)
-        try c.encode(mouseAppOverrides, forKey: .mouseAppOverrides)
     }
 }

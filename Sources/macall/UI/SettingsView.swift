@@ -270,7 +270,7 @@ enum MacallSettingsTab: Hashable, CaseIterable, Identifiable {
         case .windowSnap:    return [.accessibility, .inputMonitoring, .screenRecording]
         case .windowLayout:  return [.accessibility]
         case .clipboard:     return [.inputMonitoring]
-        case .trackpadMouse: return [.accessibility, .inputMonitoring]
+        case .trackpadMouse: return [.accessibility]
         default:             return []
         }
     }

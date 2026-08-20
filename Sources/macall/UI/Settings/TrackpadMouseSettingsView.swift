@@ -3,14 +3,9 @@ import SwiftUI
 
 /// 触控板与鼠标设置页（独立一级 tab，不再挂在「屏幕」里）。
 /// 含两块：触控板手势调节（touchpadControl）+ 鼠标优化（mouseOptimize）。
-/// 两者互不干扰：鼠标优化只改鼠标滚轮 / 侧键，绝不碰触控板。
+/// 两者互不干扰：鼠标优化只改鼠标滚轮，绝不碰触控板。
 struct TrackpadMouseSettingsView: View {
     @ObservedObject var model: SettingsModel
-
-    /// 逐 App 例外编辑：当前选中的（待添加）App bundleID。
-    @State private var selectedAppBundle: String? = nil
-    /// 正在运行、可作为例外添加的 App 列表。
-    @State private var runningApps: [NSRunningApplication] = []
 
     var body: some View {
         IadenteSettingsPage {
@@ -22,7 +17,6 @@ struct TrackpadMouseSettingsView: View {
                 mouseOptimizeSettings
             }
         }
-        .onAppear(perform: refreshApps)
     }
 
     // MARK: - 触控板手势调节
@@ -257,113 +251,6 @@ struct TrackpadMouseSettingsView: View {
 
         IadenteRowDivider()
 
-        // —— 侧键绑定 ——
-        IadenteRowDivider()
-
-        IadenteControlRow(
-            IadenteL10n.t("侧键 X1（后退）", "Side button X1 (Back)"),
-            subtitle: IadenteL10n.t(
-                "X1 侧键绑定的 macall 动作；触发即派发，相当于按了对应快捷键。选「无」则透传。",
-                "Action bound to the X1 side button; pressing it dispatches that action. None = pass through."),
-            icon: "mouse.fill",
-            colors: IadenteTheme.dashboardColors
-        ) {
-            sideActionPicker(Binding(
-                get: { model.config.mouseSideAction1 },
-                set: { model.config.mouseSideAction1 = $0; model.save() }
-            ))
-            .frame(width: 150)
-        }
-
-        IadenteControlRow(
-            IadenteL10n.t("侧键 X2（前进）", "Side button X2 (Forward)"),
-            subtitle: IadenteL10n.t(
-                "X2 侧键绑定的 macall 动作；同样触发即派发。选「无」则透传。",
-                "Action bound to the X2 side button; also dispatches on press. None = pass through."),
-            icon: "mouse.fill",
-            colors: IadenteTheme.dashboardColors
-        ) {
-            sideActionPicker(Binding(
-                get: { model.config.mouseSideAction2 },
-                set: { model.config.mouseSideAction2 = $0; model.save() }
-            ))
-            .frame(width: 150)
-        }
-
-        // —— 例外（逐 App 三态）——
-        IadenteRowDivider()
-
-        IadenteControlRow(
-            IadenteL10n.t("逐 App 例外", "Per-app overrides"),
-            subtitle: IadenteL10n.t(
-                "给某个 App 单独覆盖全局行为：强制平滑 / 强制反转。",
-                "Override the global behaviour per app: force smooth / force invert."),
-            icon: "app.badge.checkmark",
-            colors: IadenteTheme.dashboardColors
-        ) {
-            HStack(spacing: 6) {
-                Picker("", selection: $selectedAppBundle) {
-                    Text(IadenteL10n.t("选择应用…", "Choose app…")).tag(String?.none)
-                    ForEach(runningApps, id: \.bundleIdentifier) { app in
-                        Text(app.localizedName ?? app.bundleIdentifier ?? "?")
-                            .tag(app.bundleIdentifier as String?)
-                    }
-                }
-                .labelsHidden()
-                .frame(width: 150)
-
-                Button(IadenteL10n.t("添加", "Add")) { addSelectedApp() }
-                    .controlSize(.small)
-                    .buttonStyle(IadenteActionButtonStyle(colors: IadenteTheme.dashboardColors))
-            }
-        }
-
-        IadenteRowDivider()
-
-        // 例外列表（按 bundleID 排序，保证稳定顺序）。
-        let entries = model.config.mouseAppOverrides.keys.sorted()
-        if entries.isEmpty {
-            Text(IadenteL10n.t("暂无例外。点上方「添加」把当前前台 / 选中 App 加进来。", "No overrides yet. Use “Add” above to include the frontmost / selected app."))
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                .padding(.vertical, 4)
-        } else {
-            ForEach(entries, id: \.self) { bid in
-                HStack(spacing: 8) {
-                    Image(nsImage: appIcon(bid))
-                        .resizable()
-                        .frame(width: 18, height: 18)
-                        .cornerRadius(4)
-                    Text(appName(bid))
-                        .font(.system(size: 12.5))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Picker("", selection: Binding(
-                        get: { model.config.mouseAppOverrides[bid] ?? .smooth },
-                        set: { model.config.mouseAppOverrides[bid] = $0; model.save() }
-                    )) {
-                        ForEach(MouseAppOverride.allCases, id: \.self) { o in
-                            Text(o.title).tag(o)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(width: 110)
-
-                    Button {
-                        model.config.mouseAppOverrides.removeValue(forKey: bid)
-                        model.save()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help(IadenteL10n.t("移除该例外", "Remove this override"))
-                }
-                .padding(.vertical, 2)
-            }
-        }
-
-        IadenteRowDivider()
-
         IadenteControlRow(
             IadenteL10n.t("光标加速度", "Cursor acceleration"),
             subtitle: IadenteL10n.t(
@@ -381,8 +268,8 @@ struct TrackpadMouseSettingsView: View {
 
         IadenteNotice(
             text: IadenteL10n.t(
-                "以上选项默认全部关闭，仅当你打开总开关并勾选某项后才生效。鼠标优化只拦截鼠标事件，触控板滚动照常，互不干扰。需辅助功能 + 输入监控权限。",
-                "All options are off by default and only take effect once the master switch and the item itself are on. Mouse optimization intercepts only mouse events; trackpad scrolling is untouched. Needs Accessibility + Input Monitoring."),
+                "以上选项默认全部关闭，仅当你打开总开关并勾选某项后才生效。鼠标优化只拦截鼠标事件，触控板滚动照常，互不干扰。需辅助功能权限。",
+                "All options are off by default and only take effect once the master switch and the item itself are on. Mouse optimization intercepts only mouse events; trackpad scrolling is untouched. Needs Accessibility."),
             icon: "info.circle.fill",
             colors: IadenteTheme.dashboardColors
         )
@@ -459,44 +346,6 @@ struct TrackpadMouseSettingsView: View {
                 model.save()
             }
         )
-    }
-
-    private func sideActionPicker(_ selection: Binding<MouseSideAction>) -> some View {
-        Picker("", selection: selection) {
-            ForEach(MouseSideAction.allCases, id: \.self) { a in
-                Text(a.title).tag(a)
-            }
-        }
-        .labelsHidden()
-    }
-
-    // MARK: - 逐 App 例外辅助
-
-    private func refreshApps() {
-        runningApps = NSWorkspace.shared.runningApplications
-            .filter { $0.activationPolicy == .regular && $0.bundleIdentifier != nil }
-    }
-
-    private func addSelectedApp() {
-        guard let bid = selectedAppBundle, !bid.isEmpty else { return }
-        model.config.mouseAppOverrides[bid] = .smooth
-        model.save()
-        selectedAppBundle = nil
-    }
-
-    private func appName(_ bid: String) -> String {
-        if let app = runningApps.first(where: { $0.bundleIdentifier == bid }) {
-            return app.localizedName ?? bid
-        }
-        return bid
-    }
-
-    private func appIcon(_ bid: String) -> NSImage {
-        if let app = runningApps.first(where: { $0.bundleIdentifier == bid }),
-           let icon = app.icon {
-            return icon
-        }
-        return NSImage(named: NSImage.applicationIconName) ?? NSImage()
     }
 
     private func edgeActionLabel(_ a: TouchpadEdgeAction) -> String {

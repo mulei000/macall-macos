@@ -92,14 +92,9 @@ final class MouseScrollEngine {
         lock.unlock()
     }
 
-    var isAvailable: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return displayLink != nil
-    }
-
     // MARK: - 接收一次真实滚动 tick
-    // usableY / usableX 为「已按逐 App 反转、已 step 归一」的可用 delta（尚未乘 speed）。
+
+    // usableY / usableX 为「已按反转、已 step 归一」的可用 delta（尚未乘 speed）。
     // 返回 false 表示帧驱动不可用（fail-closed，调用方应原样透传事件）。
 
     @discardableResult
