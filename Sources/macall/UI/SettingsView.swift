@@ -157,6 +157,7 @@ struct SettingsView: View {
                 case .clipboard:      ClipboardSettingsView(model: model)
                 case .audio:          VolumeSettingsView(model: model)
                 case .display:        DisplaySettingsView(model: model)
+                case .trackpadMouse:  TrackpadMouseSettingsView(model: model)
                 case .tools:          ToolsSettingsView(model: model)
                 case .statusMonitor:  StatusMonitorSettingsView(model: model)
                 case .advanced:       AdvancedSettingsView()
@@ -190,6 +191,7 @@ enum MacallSettingsTab: Hashable, CaseIterable, Identifiable {
     case clipboard
     case audio
     case display
+    case trackpadMouse
     case tools
     case statusMonitor
     case advanced
@@ -205,6 +207,7 @@ enum MacallSettingsTab: Hashable, CaseIterable, Identifiable {
         case .clipboard:     return IadenteL10n.t("剪贴板", "Clipboard")
         case .audio:         return IadenteL10n.t("声音", "Audio")
         case .display:       return IadenteL10n.t("屏幕", "Screen")
+        case .trackpadMouse: return IadenteL10n.t("触控板与鼠标", "Trackpad & Mouse")
         case .tools:         return IadenteL10n.t("工具箱", "Toolbox")
         case .statusMonitor: return IadenteL10n.t("状态监控", "Monitoring")
         case .advanced:      return IadenteL10n.t("高级", "Advanced")
@@ -220,6 +223,7 @@ enum MacallSettingsTab: Hashable, CaseIterable, Identifiable {
         case .clipboard:     return IadenteL10n.t("剪贴板历史与图片文字识别", "Clipboard history and image OCR")
         case .audio:         return IadenteL10n.t("主音量、逐 App 音量、输出设备、麦克风、系统提示音", "Master & per-app volume, output devices, mic, system sounds")
         case .display:       return IadenteL10n.t("外接显示器控制、放大镜、屏幕取色", "External monitor control, magnifier, color picker")
+        case .trackpadMouse: return IadenteL10n.t("触控板边缘手势、鼠标滚轮平滑 / 反转 / 侧键绑定", "Trackpad edge gestures, mouse wheel smoothing / invert / side-button bindings")
         case .tools:         return IadenteL10n.t("文字片段、二维码、启动器、电源与外观", "Snippets, QR codes, launcher, power & appearance")
         case .statusMonitor: return IadenteL10n.t("菜单栏模块、系统状态、通知阈值", "Menu bar modules, system status, notification thresholds")
         case .advanced:      return IadenteL10n.t("数据、缓存、日志", "Data, cache, logs")
@@ -235,6 +239,7 @@ enum MacallSettingsTab: Hashable, CaseIterable, Identifiable {
         case .clipboard:     return "doc.on.clipboard"
         case .audio:         return "speaker.wave.2.fill"
         case .display:       return "display"
+        case .trackpadMouse: return "computermouse.fill"
         case .tools:         return "wrench.and.screwdriver.fill"
         case .statusMonitor: return "chart.bar.fill"
         case .advanced:      return "slider.horizontal.3"
@@ -250,6 +255,7 @@ enum MacallSettingsTab: Hashable, CaseIterable, Identifiable {
         case .clipboard:     return IadenteTheme.automationColors
         case .audio:         return IadenteTheme.advancedColors
         case .display:       return IadenteTheme.dashboardColors
+        case .trackpadMouse: return IadenteTheme.dashboardColors
         case .tools:         return IadenteTheme.aboutColors
         case .statusMonitor: return IadenteTheme.dashboardColors
         case .advanced:      return IadenteTheme.advancedColors
@@ -264,6 +270,7 @@ enum MacallSettingsTab: Hashable, CaseIterable, Identifiable {
         case .windowSnap:    return [.accessibility, .inputMonitoring, .screenRecording]
         case .windowLayout:  return [.accessibility]
         case .clipboard:     return [.inputMonitoring]
+        case .trackpadMouse: return [.accessibility, .inputMonitoring]
         default:             return []
         }
     }

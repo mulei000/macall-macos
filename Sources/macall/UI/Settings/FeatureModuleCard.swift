@@ -246,8 +246,8 @@ enum FeatureCatalog {
                 icon: "mouse.fill",
                 colors: IadenteTheme.dashboardColors,
                 subtitle: IadenteL10n.t(
-                    "鼠标滚轮独立反转、平滑滚动（轻量 / 完整惯性）、侧键互换；只改鼠标、绝不碰触控板，默认全关。光标加速度由系统设置控制。",
-                    "Invert / smooth the mouse wheel (light or full inertia) and swap side buttons — mouse only, never the trackpad, all off by default. Cursor acceleration is set in System Settings."),
+                    "鼠标滚轮独立反转、参数化惯性平滑（最短步长 / 速度增益 / 平滑时长）、侧键绑定 macall 动作、逐 App 三态例外；只改鼠标、绝不碰触控板，默认全关。光标加速度由系统设置控制。",
+                    "Invert the wheel, parametrised inertial smoothing (min step / speed gain / duration), bind side buttons to macall actions, and per-app three-state overrides — mouse only, never the trackpad, all off by default. Cursor acceleration is set in System Settings."),
                 hotkeyPrefixes: [])
 
         default:

@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 /// Dock 图标反转的两种互斥行为：点击已激活 App 的 Dock 图标时是最小化全部窗口，还是隐藏整个 App。
 enum DockToggleBehavior: String, Codable {
@@ -20,10 +21,105 @@ enum TouchpadEdgeAction: String, Codable, CaseIterable {
     case off         // 该边缘不触发
 }
 
-/// 鼠标平滑滚动的两种模式：轻量（低通滤波，仅平滑抖动）或完整惯性（带滑行尾迹）。
-enum MouseSmoothMode: String, Codable, CaseIterable {
-    case light  // 轻量：直接透传低通滤波后的值，不改变滚动总量，最稳
-    case full   // 完整：当场只放一部分，余量衰减补发，形成惯性滑行
+/// 鼠标侧键（X1 / X2）可绑定的 macall 动作。选中后由 MouseOptimizeFeature 内部派发，
+/// 走与全局快捷键相同的 `FeatureRegistry.dispatch(featureID:action:)` 路径，不合成键盘事件。
+enum MouseSideAction: String, Codable, CaseIterable {
+    case none
+    case volumeMute
+    case alwaysOnTop
+    case magnifierToggle
+    case displaySleep
+    case lock
+    case darkMode
+    case switcher
+    case clipboard
+    case snippets
+    case colorpicker
+    case ddcBrightUp
+    case ddcBrightDown
+
+    var title: String {
+        switch self {
+        case .none:           return IadenteL10n.t("无（透传）", "None (pass through)")
+        case .volumeMute:     return IadenteL10n.t("静音切换", "Toggle mute")
+        case .alwaysOnTop:    return IadenteL10n.t("窗口置顶", "Always on top")
+        case .magnifierToggle:return IadenteL10n.t("屏幕放大镜", "Magnifier")
+        case .displaySleep:   return IadenteL10n.t("熄屏", "Display sleep")
+        case .lock:           return IadenteL10n.t("锁屏", "Lock screen")
+        case .darkMode:       return IadenteL10n.t("深色模式", "Dark mode")
+        case .switcher:       return IadenteL10n.t("窗口切换", "Window switcher")
+        case .clipboard:      return IadenteL10n.t("剪贴板", "Clipboard")
+        case .snippets:       return IadenteL10n.t("文字片段", "Snippets")
+        case .colorpicker:    return IadenteL10n.t("屏幕取色", "Color picker")
+        case .ddcBrightUp:    return IadenteL10n.t("显示器调亮", "Monitor brighter")
+        case .ddcBrightDown:  return IadenteL10n.t("显示器调暗", "Monitor dimmer")
+        }
+    }
+
+    /// 派发目标（feature id, action key）；none 返回 nil。
+    var target: (feature: String, action: String)? {
+        switch self {
+        case .none:            return nil
+        case .volumeMute:      return ("volume", "volume.mute")
+        case .alwaysOnTop:     return ("alwaysontop", "alwaysontop.toggle")
+        case .magnifierToggle: return ("magnifier", "magnifier.toggle")
+        case .displaySleep:    return ("power", "power.displaySleep")
+        case .lock:            return ("power", "power.lock")
+        case .darkMode:        return ("power", "power.toggleDark")
+        case .switcher:        return ("switcher", "switcher.show")
+        case .clipboard:       return ("clipboard", "clipboard.show")
+        case .snippets:        return ("snippets", "snippets.show")
+        case .colorpicker:     return ("colorpicker", "colorpicker.pick")
+        case .ddcBrightUp:     return ("ddc", "ddc.brightnessUp")
+        case .ddcBrightDown:   return ("ddc", "ddc.brightnessDown")
+        }
+    }
+}
+
+/// 鼠标高级设置里的三个「修饰键」：加速键 / 转换键 / 禁用键。
+/// 滚动时若按住对应修饰键，会临时改变平滑行为（见 MouseOptimizeFeature）。
+enum MouseModifierKey: String, Codable, CaseIterable {
+    case none
+    case cmd
+    case ctrl
+    case opt
+    case shift
+
+    /// 对应的 CGEventFlags；none 为空。
+    var flag: CGEventFlags {
+        switch self {
+        case .none: return []
+        case .cmd:  return .maskCommand
+        case .ctrl: return .maskControl
+        case .opt:  return .maskAlternate
+        case .shift:return .maskShift
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .none: return IadenteL10n.t("无", "None")
+        case .cmd:  return IadenteL10n.t("⌘", "⌘")
+        case .ctrl: return IadenteL10n.t("⌃", "⌃")
+        case .opt:  return IadenteL10n.t("⌥", "⌥")
+        case .shift:return IadenteL10n.t("⇧", "⇧")
+        }
+    }
+}
+
+/// 逐 App 例外（Mos 式三态）：对某个 App 单独覆盖全局鼠标优化行为。
+enum MouseAppOverride: String, Codable, CaseIterable {
+    case smooth     // 该 App：强制平滑（忽略全局平滑开关，强制开）
+    case invert     // 该 App：强制反转（忽略全局反转开关，强制开）
+    case whitelist  // 该 App：白名单豁免，完全不优化（原样透传）
+
+    var title: String {
+        switch self {
+        case .smooth:    return IadenteL10n.t("强制平滑", "Force smooth")
+        case .invert:    return IadenteL10n.t("强制反转", "Force invert")
+        case .whitelist: return IadenteL10n.t("白名单豁免", "Whitelisted (off)")
+        }
+    }
 }
 
 /// 全局配置。保存到 `~/.config/macall/config.json`，对新旧字段容错。
@@ -124,12 +220,26 @@ struct Configuration: Codable {
 
     /// 鼠标优化 - 滚轮独立反转（只影响鼠标滚轮，不碰触控板）。默认 false。
     var mouseScrollInvert: Bool = false
-    /// 鼠标优化 - 平滑滚动（轻量低通，消除生硬感）。默认 false。
+    /// 鼠标优化 - 平滑滚动（参数化惯性引擎，替代旧版 light/full 二选一）。默认 false。
     var mouseSmoothScroll: Bool = false
-    /// 鼠标优化 - 平滑模式：轻量（默认）或完整惯性。
-    var mouseSmoothMode: MouseSmoothMode = .light
-    /// 鼠标优化 - 侧键互换（X1 后退 ↔ X2 前进）。默认 false。
-    var mouseSideButtonSwap: Bool = false
+    /// 鼠标优化 - 最短步长：小于该幅度的微动 tick 先累积、超过才刷新（滤抖 / 合并细碎滚动）。
+    var mouseMinStep: Double = 1.0
+    /// 鼠标优化 - 速度增益：滚轮速度整体倍率（1=原速，越大越快）。
+    var mouseSpeedGain: Double = 1.0
+    /// 鼠标优化 - 平滑时长（秒）：惯性滑行尾迹的持续时间，越大越顺滑、滑行越久。
+    var mouseSmoothDuration: Double = 0.18
+    /// 鼠标优化 - 加速键：滚动时按住此修饰键临时加倍速度增益。
+    var mouseAccelKey: MouseModifierKey = .none
+    /// 鼠标优化 - 转换键：滚动时按住此修饰键临时反转方向。
+    var mouseConvertKey: MouseModifierKey = .none
+    /// 鼠标优化 - 禁用键：滚动时按住此修饰键临时关闭平滑（原样透传）。
+    var mouseDisableKey: MouseModifierKey = .none
+    /// 鼠标优化 - 侧键 X1（后退键）绑定的 macall 动作；none = 透传。
+    var mouseSideAction1: MouseSideAction = .none
+    /// 鼠标优化 - 侧键 X2（前进键）绑定的 macall 动作；none = 透传。
+    var mouseSideAction2: MouseSideAction = .none
+    /// 鼠标优化 - 逐 App 例外：bundleID → 三态覆盖（白名单 / 强制平滑 / 强制反转）。
+    var mouseAppOverrides: [String: MouseAppOverride] = [:]
 
     init() {}
 
@@ -370,7 +480,7 @@ struct Configuration: Codable {
         case enabled, gap, monitorShowPercentage, enabledFeatures, enabledHotkeys, hotkeys, previewEnabled, outputDeviceUIDs, perAppVolume, perAppMuted, perAppDeviceUIDs, autoRouteOutput, devicePriority, outputSwitcherDeviceUIDs, dockToggleBehavior, edgeSnapSelectorEnabled, edgeSnapLeftLayout, edgeSnapRightLayout
         case hiddenAudioApps, hiddenAudioAppNames, audioDeviceOrder, hiddenAudioDevices
         case clipboardMaxItems, clipboardRetentionDays, clipboardKeepImages, clipboardKeepFiles, magnifierZoom, maxTemporaryScenes, defaultInputDeviceUID, systemSoundOutputDeviceUID, autoDuckOnHeadphoneUnplug, autoDuckTargetVolume, touchpadSensitivity, touchpadStartZone, touchpadMinTravel, touchpadLeftAction, touchpadRightAction, touchpadHaptic
-        case mouseScrollInvert, mouseSmoothScroll, mouseSmoothMode, mouseSideButtonSwap
+        case mouseScrollInvert, mouseSmoothScroll, mouseMinStep, mouseSpeedGain, mouseSmoothDuration, mouseAccelKey, mouseConvertKey, mouseDisableKey, mouseSideAction1, mouseSideAction2, mouseAppOverrides
     }
 
     init(from d: Decoder) throws {
@@ -415,8 +525,15 @@ struct Configuration: Codable {
         touchpadHaptic = try c.decodeIfPresent(Bool.self, forKey: .touchpadHaptic) ?? true
         mouseScrollInvert = try c.decodeIfPresent(Bool.self, forKey: .mouseScrollInvert) ?? false
         mouseSmoothScroll = try c.decodeIfPresent(Bool.self, forKey: .mouseSmoothScroll) ?? false
-        mouseSmoothMode = try c.decodeIfPresent(MouseSmoothMode.self, forKey: .mouseSmoothMode) ?? .light
-        mouseSideButtonSwap = try c.decodeIfPresent(Bool.self, forKey: .mouseSideButtonSwap) ?? false
+        mouseMinStep = try c.decodeIfPresent(Double.self, forKey: .mouseMinStep) ?? 1.0
+        mouseSpeedGain = try c.decodeIfPresent(Double.self, forKey: .mouseSpeedGain) ?? 1.0
+        mouseSmoothDuration = try c.decodeIfPresent(Double.self, forKey: .mouseSmoothDuration) ?? 0.18
+        mouseAccelKey = try c.decodeIfPresent(MouseModifierKey.self, forKey: .mouseAccelKey) ?? .none
+        mouseConvertKey = try c.decodeIfPresent(MouseModifierKey.self, forKey: .mouseConvertKey) ?? .none
+        mouseDisableKey = try c.decodeIfPresent(MouseModifierKey.self, forKey: .mouseDisableKey) ?? .none
+        mouseSideAction1 = try c.decodeIfPresent(MouseSideAction.self, forKey: .mouseSideAction1) ?? .none
+        mouseSideAction2 = try c.decodeIfPresent(MouseSideAction.self, forKey: .mouseSideAction2) ?? .none
+        mouseAppOverrides = try c.decodeIfPresent([String: MouseAppOverride].self, forKey: .mouseAppOverrides) ?? [:]
     }
 
     func encode(to e: Encoder) throws {
@@ -461,7 +578,14 @@ struct Configuration: Codable {
         try c.encode(touchpadHaptic, forKey: .touchpadHaptic)
         try c.encode(mouseScrollInvert, forKey: .mouseScrollInvert)
         try c.encode(mouseSmoothScroll, forKey: .mouseSmoothScroll)
-        try c.encode(mouseSmoothMode, forKey: .mouseSmoothMode)
-        try c.encode(mouseSideButtonSwap, forKey: .mouseSideButtonSwap)
+        try c.encode(mouseMinStep, forKey: .mouseMinStep)
+        try c.encode(mouseSpeedGain, forKey: .mouseSpeedGain)
+        try c.encode(mouseSmoothDuration, forKey: .mouseSmoothDuration)
+        try c.encode(mouseAccelKey, forKey: .mouseAccelKey)
+        try c.encode(mouseConvertKey, forKey: .mouseConvertKey)
+        try c.encode(mouseDisableKey, forKey: .mouseDisableKey)
+        try c.encode(mouseSideAction1, forKey: .mouseSideAction1)
+        try c.encode(mouseSideAction2, forKey: .mouseSideAction2)
+        try c.encode(mouseAppOverrides, forKey: .mouseAppOverrides)
     }
 }

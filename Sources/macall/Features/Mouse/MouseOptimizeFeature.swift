@@ -3,23 +3,30 @@ import ApplicationServices
 import CoreGraphics
 import Foundation
 
-// MARK: - 鼠标优化（滚轮反转 / 平滑滚动 / 侧键互换）
+// MARK: - 鼠标优化（滚轮反转 / 平滑滚动 / 侧键绑定 / 逐 App 例外）
 //
-// 思路参考开源的 Mos / MouseBridge / SmoothMouse：用单个 CGEventTap 拦截鼠标
-// 滚轮（scrollWheel）与侧键（otherMouseDown/Up），按子开关做轻量改写。
+// 思路参考开源的 Mos / SmoothMouse / MouseBridge：用单个 CGEventTap 拦截鼠标
+// 滚轮（scrollWheel）与侧键（otherMouseDown），按子开关做轻量改写。
 //
 // 关键隔离设计（满足「默认全关、不影响其它功能」）：
 //   · 单个功能 ↔ 单个 tap：install 时只建一次，uninstall 时彻底拆除并放行所有事件；
-//   · 只有「功能总开关开 + 至少一个子开关开」时才真正创建 tap；子开关全关时
+//   · 只有「功能总开关开 + 至少一个子功能开」时才真正创建 tap；子开关全关时
 //     tap 不创建，事件原样透传，零侵入；
 //   · 鼠标 / 触控板分流：用 `scrollWheelEventIsContinuous` 判定——触控板事件该位为 1
 //     （连续事件），鼠标滚轮为 0（离散）。触控板事件一律原样放行，绝不串味；
-//   · 默认全部子开关关闭（mouseScrollInvert / mouseSmoothScroll / mouseSideButtonSwap
-//     均 false，平滑模式默认 light），即使用户开着总开关也完全不改动滚动行为；
+//   · 默认全部子开关关闭（mouseScrollInvert / mouseSmoothScroll 均 false，
+//     侧键绑定均为 none），即使用户开着总开关也完全不改滚动行为；
 //   · 失败即 fail-closed：权限不足 / tap 创建失败时只记日志、不抛异常、不拦事件，
 //     其它功能（快捷键、分屏等）照常工作；
 //   · 光标加速度：本功能**不**改系统参数，只提供「打开系统鼠标设置」按钮
 //     （x-apple.systempreferences 跳转），与 SmoothMouse 的「关闭加速度」解耦。
+//
+// 平滑引擎（诉求 3：原先只是 α=0.5 低通，不够顺）：改为带参数的惯性引擎——
+//   最短步长 过滤生硬的小跳变（微动先累积、超过才刷新）；
+//   速度增益 整体倍率（也可被「加速键」临时翻倍）；
+//   平滑时长 决定惯性滑行尾迹的持续时间（越大越顺、滑行越久）。
+// 引擎把每次真实 tick 的能量存进「蓄水池」，按比例逐帧（60Hz）放出，
+// 总滚动量守恒（放出的和 = 收到的和），并在手势结束后把残量补发干净。
 
 final class MouseOptimizeFeature: Feature {
     let id = "mouseOptimize"
@@ -37,16 +44,11 @@ final class MouseOptimizeFeature: Feature {
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
 
-    // 平滑（轻量低通）状态：区分连续手势，长间隔后复位。
+    // 参数化惯性引擎状态：蓄水池（尚未放出、待惯性补发的余量）。
+    private var reservoirV: Double = 0
+    private var reservoirH: Double = 0
     private var lastScrollTime: TimeInterval = 0
-    private var smoothedV: Double = 0
-    private var smoothedH: Double = 0
-
-    // 完整惯性：缓冲 + 衰减尾迹。
-    private var momentumBufferV: Double = 0
-    private var momentumBufferH: Double = 0
     private var momentumTimer: Timer?
-    private var momentumStart: TimeInterval = 0
     private var isEmitting = false
     /// 合成惯性事件打标，避免 tap 回调递归处理自己发出的事件。
     private let synthSource: CGEventSource? = CGEventSource(stateID: .combinedSessionState)
@@ -83,7 +85,10 @@ final class MouseOptimizeFeature: Feature {
     /// 是否真正需要拦截：总开关开 且 至少一个子功能开。
     private func wantsActive() -> Bool {
         config.isFeatureEnabled(id, default: enabledByDefault) &&
-        (config.mouseScrollInvert || config.mouseSmoothScroll || config.mouseSideButtonSwap)
+        (config.mouseScrollInvert ||
+         config.mouseSmoothScroll ||
+         config.mouseSideAction1 != .none ||
+         config.mouseSideAction2 != .none)
     }
 
     /// 按门控同步 tap：需要且未建 → 建；不需要且已建 → 拆。
@@ -114,11 +119,10 @@ final class MouseOptimizeFeature: Feature {
         guard tap == nil else { return }
         guard ensurePermission() else { return }
 
-        // 监听：滚轮 + 侧键按下/抬起。拆成子表达式避免整条 CGEventMask 触发类型检查超时。
+        // 监听：滚轮 + 侧键按下（抬起不必拦截，按下即派发一次即可）。
         var rawMask: UInt64 = 0
         rawMask |= UInt64(1) << CGEventType.scrollWheel.rawValue
         rawMask |= UInt64(1) << CGEventType.otherMouseDown.rawValue
-        rawMask |= UInt64(1) << CGEventType.otherMouseUp.rawValue
         let mask: CGEventMask = rawMask
 
         let callback: CGEventTapCallBack = { _, type, event, userInfo in
@@ -135,7 +139,7 @@ final class MouseOptimizeFeature: Feature {
             switch type {
             case .scrollWheel:
                 return f.handleScroll(event)
-            case .otherMouseDown, .otherMouseUp:
+            case .otherMouseDown:
                 return f.handleSideButton(event)
             default:
                 return Unmanaged.passRetained(event)
@@ -173,7 +177,7 @@ final class MouseOptimizeFeature: Feature {
 
     // MARK: - 滚轮处理
 
-    /// 返回被（可能）改写后的事件；原件原样返回即透传。
+    /// 返回被（可能）改写后的事件；返回 nil 表示「吃掉」该事件（由本功能用合成事件替代）。
     private func handleScroll(_ event: CGEvent) -> Unmanaged<CGEvent>? {
         // 触控板事件（连续）一律放行，避免与触控板手势调节串味。
         let isContinuous = event.getIntegerValueField(.scrollWheelEventIsContinuous)
@@ -181,92 +185,112 @@ final class MouseOptimizeFeature: Feature {
             return Unmanaged.passRetained(event)
         }
 
+        // 当前前台 App 的 bundleID（用于逐 App 例外）。
+        let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
+
+        // 计算该 App 的有效开关（全局 + 逐 App 三态覆盖）。
+        let override = config.mouseAppOverrides[bundleID]
+        var effSmooth = config.mouseSmoothScroll
+        var effInvert = config.mouseScrollInvert
+        if let override {
+            switch override {
+            case .smooth:    effSmooth = true
+            case .invert:    effInvert = true
+            case .whitelist: effSmooth = false; effInvert = false
+            }
+        }
+
+        // 高级修饰键（滚动时按住临时改变行为）。
+        let flags = event.flags
+        let accel = config.mouseAccelKey != .none && flags.contains(config.mouseAccelKey.flag)
+        let convert = config.mouseConvertKey != .none && flags.contains(config.mouseConvertKey.flag)
+        let disable = config.mouseDisableKey != .none && flags.contains(config.mouseDisableKey.flag)
+        if disable { effSmooth = false }
+        if convert { effInvert = true }
+
+        let rawV = event.getIntegerValueField(.scrollWheelEventDeltaAxis1)
+        let rawH = event.getIntegerValueField(.scrollWheelEventDeltaAxis2)
+        let sign: Double = effInvert ? -1 : 1
+        let signedV = Double(rawV) * sign
+        let signedH = Double(rawH) * sign
+
+        // 不平滑：仅（可能）反转，原样返回事件。
+        guard effSmooth else {
+            if effInvert {
+                setScrollDelta(event, v: Int64(signedV.rounded()), h: Int64(signedH.rounded()))
+            }
+            return Unmanaged.passRetained(event)
+        }
+
+        // 平滑：把这次 tick 的能量（含速度增益）并入蓄水池，吃掉原事件，
+        // 由惯性引擎逐帧放出（总滚动量守恒）。
+        let gain = config.mouseSpeedGain * (accel ? 2.0 : 1.0)
         let now = ProcessInfo.processInfo.systemUptime
-        // 长间隔（>150ms）视为新一次滚动手势，复位平滑状态。
+        // 长间隔（>150ms）视为新一次滚动手势，先把上一轮的残量补发干净。
         if now - lastScrollTime > 0.15 {
-            smoothedV = 0; smoothedH = 0
-            momentumBufferV = 0; momentumBufferH = 0
-            stopMomentum()
+            flushReservoir()
         }
         lastScrollTime = now
 
-        // 原始 delta（整数 / 定点 / 像素三套表示都读出来再分别改写）。
-        let rawV = event.getIntegerValueField(.scrollWheelEventDeltaAxis1)
-        let rawH = event.getIntegerValueField(.scrollWheelEventDeltaAxis2)
+        reservoirV += signedV * gain
+        reservoirH += signedH * gain
 
-        // 反转（影响后续所有计算：先把符号翻转）。
-        let sign: Double = config.mouseScrollInvert ? -1 : 1
-        let rV = Double(rawV) * sign
-        let rH = Double(rawH) * sign
-
-        guard config.mouseSmoothScroll else {
-            // 仅反转、不平滑：直接把原事件三套 delta 取反后返回。
-            if config.mouseScrollInvert {
-                setScrollDelta(event, v: Int64(rV.rounded()), h: Int64(rH.rounded()))
-            }
-            return Unmanaged.passRetained(event)
+        pump()
+        if abs(reservoirV) >= config.mouseMinStep || abs(reservoirH) >= config.mouseMinStep {
+            startMomentum()
         }
-
-        if config.mouseSmoothMode == .light {
-            // 轻量低通：平滑抖动，不改变总量（每 tick 透传滤波后的值）。
-            let alpha = 0.5
-            smoothedV = smoothedV * alpha + rV * (1 - alpha)
-            smoothedH = smoothedH * alpha + rH * (1 - alpha)
-            setScrollDelta(event, v: Int64(smoothedV.rounded()), h: Int64(smoothedH.rounded()))
-            return Unmanaged.passRetained(event)
-        } else {
-            // 完整惯性：当场只放一部分，余量进缓冲，由定时器衰减补发，形成滑行。
-            let holdRatio = 0.3
-            let immediateV = rV * (1 - holdRatio)
-            let immediateH = rH * (1 - holdRatio)
-            momentumBufferV += rV * holdRatio
-            momentumBufferH += rH * holdRatio
-            setScrollDelta(event, v: Int64(immediateV.rounded()), h: Int64(immediateH.rounded()))
-            if abs(momentumBufferV) > 0.5 || abs(momentumBufferH) > 0.5 {
-                startMomentum()
-            }
-            return Unmanaged.passRetained(event)
-        }
+        // 吃掉原事件；真正的滚动由 pump 投放的合成事件完成。
+        return nil
     }
 
-    /// 统一改写滚轮事件的 整数 / 定点 / 像素 三套 delta 表示，避免部分 App 读到旧值。
-    private func setScrollDelta(_ event: CGEvent, v: Int64, h: Int64) {
-        event.setIntegerValueField(.scrollWheelEventDeltaAxis1, value: v)
-        event.setIntegerValueField(.scrollWheelEventDeltaAxis2, value: h)
-        // 定点（fixed-point）与像素（point）表示同步取反，保证 Chrome/Safari 等读像素 delta 的 App 也正确。
-        event.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1, value: Double(v))
-        event.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis2, value: Double(h))
-        event.setIntegerValueField(.scrollWheelEventPointDeltaAxis1, value: v)
-        event.setIntegerValueField(.scrollWheelEventPointDeltaAxis2, value: h)
+    // MARK: - 参数化惯性引擎
+
+    /// 每帧放出的比例：由「平滑时长」推出，使蓄水池在约 smoothDuration 秒后衰减到约 1%。
+    private func emitFraction() -> Double {
+        let totalTicks = max(1.0, config.mouseSmoothDuration * 60.0)
+        return 1.0 - pow(0.01, 1.0 / totalTicks)
     }
 
-    // MARK: - 完整惯性尾迹
+    /// 放出蓄水池的一部分（守恒：放出量 = 蓄水池减少量）。
+    private func pump() {
+        guard self.tap != nil else { return }
+        let frac = emitFraction()
+        let v = reservoirV * frac
+        let h = reservoirH * frac
+        reservoirV -= v
+        reservoirH -= h
+        // 残量很小：补发干净并停表，保证总滚动量不丢。
+        if abs(reservoirV) < 0.5 && abs(reservoirH) < 0.5 {
+            postSyntheticScroll(v: reservoirV, h: reservoirH)
+            reservoirV = 0; reservoirH = 0
+            stopMomentum()
+            return
+        }
+        postSyntheticScroll(v: v, h: h)
+    }
+
+    /// 手势结束 / 重开时，把蓄水池里残余的能量一次性补发，避免丢滚动量。
+    private func flushReservoir() {
+        guard self.tap != nil else { reservoirV = 0; reservoirH = 0; return }
+        if abs(reservoirV) > 0.001 || abs(reservoirH) > 0.001 {
+            postSyntheticScroll(v: reservoirV, h: reservoirH)
+        }
+        reservoirV = 0; reservoirH = 0
+        stopMomentum()
+    }
 
     private func startMomentum() {
         guard momentumTimer == nil else { return }
-        momentumStart = ProcessInfo.processInfo.systemUptime
         let t = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
-            self?.emitMomentumTick()
+            self?.pump()
         }
         RunLoop.main.add(t, forMode: .common)
         momentumTimer = t
     }
 
-    private func emitMomentumTick() {
-        // 安全边界：最多补发 400ms；低于阈值即停，绝不无限滚动。
-        let now = ProcessInfo.processInfo.systemUptime
-        guard now - momentumStart < 0.4 else { stopMomentum(); return }
-        let decay = 0.78
-        let v = momentumBufferV * 0.25
-        let h = momentumBufferH * 0.25
-        momentumBufferV *= decay
-        momentumBufferH *= decay
-        if abs(momentumBufferV) < 0.5 && abs(momentumBufferH) < 0.5 {
-            momentumBufferV = 0; momentumBufferH = 0
-            stopMomentum()
-            return
-        }
-        postSyntheticScroll(v: v, h: h)
+    private func stopMomentum() {
+        momentumTimer?.invalidate()
+        momentumTimer = nil
     }
 
     /// 合成并投递一条滚轮事件（带 source 标记，回调里识别为自己发出的即放行）。
@@ -285,25 +309,35 @@ final class MouseOptimizeFeature: Feature {
         isEmitting = false
     }
 
-    private func stopMomentum() {
-        momentumTimer?.invalidate()
-        momentumTimer = nil
-        momentumBufferV = 0
-        momentumBufferH = 0
+    /// 统一改写滚轮事件的 整数 / 定点 / 像素 三套 delta 表示，避免部分 App 读到旧值。
+    private func setScrollDelta(_ event: CGEvent, v: Int64, h: Int64) {
+        event.setIntegerValueField(.scrollWheelEventDeltaAxis1, value: v)
+        event.setIntegerValueField(.scrollWheelEventDeltaAxis2, value: h)
+        // 定点（fixed-point）与像素（point）表示同步取反，保证 Chrome/Safari 等读像素 delta 的 App 也正确。
+        event.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1, value: Double(v))
+        event.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis2, value: Double(h))
+        event.setIntegerValueField(.scrollWheelEventPointDeltaAxis1, value: v)
+        event.setIntegerValueField(.scrollWheelEventPointDeltaAxis2, value: h)
     }
 
-    // MARK: - 侧键处理
+    // MARK: - 侧键处理（绑定 macall 动作）
 
-    /// 侧键互换（X1 后退 ↔ X2 前进）。非侧键事件原样返回。
+    /// 侧键（X1=3 / X2=4）绑定 macall 动作：命中即派发，等价于按了对应快捷键；
+    /// 派发成功则吃掉该侧键事件（避免 App 自己的前进/后退也触发）。未绑定则原样透传。
     private func handleSideButton(_ event: CGEvent) -> Unmanaged<CGEvent>? {
-        guard config.mouseSideButtonSwap else {
+        let btn = event.getIntegerValueField(.mouseEventButtonNumber)
+        let action: MouseSideAction? = (btn == 3) ? config.mouseSideAction1
+                               : (btn == 4) ? config.mouseSideAction2
+                               : nil
+        guard let action, action != .none, let target = action.target else {
             return Unmanaged.passRetained(event)
         }
-        let btn = event.getIntegerValueField(.mouseEventButtonNumber)
-        if btn == 3 { // X1（后退）
-            event.setIntegerValueField(.mouseEventButtonNumber, value: 4)
-        } else if btn == 4 { // X2（前进）
-            event.setIntegerValueField(.mouseEventButtonNumber, value: 3)
+        // 派发走全局 FeatureRegistry（与快捷键同一路径），不合成键盘事件。
+        // registry 未就绪时退回透传，避免白白吃掉点击。
+        if let registry = context?.hotkeys.registry {
+            registry.dispatch(featureId: target.feature, action: target.action)
+            Log.info("[mouse] 侧键 \(btn == 3 ? "X1" : "X2") → 派发 \(target.feature)/\(target.action)")
+            return nil
         }
         return Unmanaged.passRetained(event)
     }

@@ -12,7 +12,7 @@ RESOURCES="$APP_PATH/Contents/Resources"
 DESKTOP="$HOME/Desktop"
 
 APP_VERSION_NUM="0.5.0"
-APP_BUILD=137
+APP_BUILD=138
 
 # 优先使用 WorkBuddy 管理的 Swift 工具链，否则回退到系统 swiftc。
 SWIFT_BIN="swiftc"
