@@ -230,7 +230,7 @@ struct TrackpadMouseSettingsView: View {
                     .textFieldStyle(.roundedBorder)
                     .multilineTextAlignment(.trailing)
                     .frame(width: 52)
-                Stepper("", value: speedGainBinding, in: 0.5...3, step: 0.1)
+                Stepper("", value: speedGainBinding, in: 0.5...10, step: 0.1)
                     .labelsHidden()
             }
             .frame(width: 120)
@@ -259,51 +259,6 @@ struct TrackpadMouseSettingsView: View {
         }
 
         IadenteRowDivider()
-
-        IadenteControlRow(
-            IadenteL10n.t("加速键", "Accel key"),
-            subtitle: IadenteL10n.t(
-                "滚动时按住此修饰键，临时把速度增益再翻倍。",
-                "Hold this modifier while scrolling to temporarily double the speed gain."),
-            icon: "bolt.fill",
-            colors: IadenteTheme.dashboardColors
-        ) {
-            modifierPicker(Binding(
-                get: { model.config.mouseAccelKey },
-                set: { model.config.mouseAccelKey = $0; model.save() }
-            ))
-            .frame(width: 70)
-        }
-
-        IadenteControlRow(
-            IadenteL10n.t("转换键", "Convert key"),
-            subtitle: IadenteL10n.t(
-                "滚动时按住此修饰键，临时反转方向。",
-                "Hold this modifier while scrolling to temporarily reverse direction."),
-            icon: "arrow.left.arrow.right.circle",
-            colors: IadenteTheme.dashboardColors
-        ) {
-            modifierPicker(Binding(
-                get: { model.config.mouseConvertKey },
-                set: { model.config.mouseConvertKey = $0; model.save() }
-            ))
-            .frame(width: 70)
-        }
-
-        IadenteControlRow(
-            IadenteL10n.t("禁用键", "Disable key"),
-            subtitle: IadenteL10n.t(
-                "滚动时按住此修饰键，临时关闭平滑（原样透传）。",
-                "Hold this modifier while scrolling to temporarily disable smoothing (pass through)."),
-            icon: "pause.circle",
-            colors: IadenteTheme.dashboardColors
-        ) {
-            modifierPicker(Binding(
-                get: { model.config.mouseDisableKey },
-                set: { model.config.mouseDisableKey = $0; model.save() }
-            ))
-            .frame(width: 70)
-        }
 
         // —— 侧键绑定 ——
         IadenteRowDivider()
@@ -344,8 +299,8 @@ struct TrackpadMouseSettingsView: View {
         IadenteControlRow(
             IadenteL10n.t("逐 App 例外", "Per-app overrides"),
             subtitle: IadenteL10n.t(
-                "给某个 App 单独覆盖全局行为：强制平滑 / 强制反转 / 白名单豁免（完全不优化）。",
-                "Override the global behaviour per app: force smooth / force invert / whitelist (fully off)."),
+                "给某个 App 单独覆盖全局行为：强制平滑 / 强制反转。",
+                "Override the global behaviour per app: force smooth / force invert."),
             icon: "app.badge.checkmark",
             colors: IadenteTheme.dashboardColors
         ) {
@@ -492,7 +447,7 @@ struct TrackpadMouseSettingsView: View {
             get: { model.config.mouseSpeedGain },
             set: { v in
                 guard v.isFinite, v > 0 else { return }
-                model.config.mouseSpeedGain = min(3, max(0.5, (v * 100).rounded() / 100))
+                model.config.mouseSpeedGain = min(10, max(0.5, (v * 100).rounded() / 100))
                 model.save()
             }
         )
@@ -507,15 +462,6 @@ struct TrackpadMouseSettingsView: View {
                 model.save()
             }
         )
-    }
-
-    private func modifierPicker(_ selection: Binding<MouseModifierKey>) -> some View {
-        Picker("", selection: selection) {
-            ForEach(MouseModifierKey.allCases, id: \.self) { k in
-                Text(k.title).tag(k)
-            }
-        }
-        .labelsHidden()
     }
 
     private func sideActionPicker(_ selection: Binding<MouseSideAction>) -> some View {

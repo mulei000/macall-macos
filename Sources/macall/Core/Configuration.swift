@@ -76,48 +76,15 @@ enum MouseSideAction: String, Codable, CaseIterable {
     }
 }
 
-/// 鼠标高级设置里的三个「修饰键」：加速键 / 转换键 / 禁用键。
-/// 滚动时若按住对应修饰键，会临时改变平滑行为（见 MouseOptimizeFeature）。
-enum MouseModifierKey: String, Codable, CaseIterable {
-    case none
-    case cmd
-    case ctrl
-    case opt
-    case shift
-
-    /// 对应的 CGEventFlags；none 为空。
-    var flag: CGEventFlags {
-        switch self {
-        case .none: return []
-        case .cmd:  return .maskCommand
-        case .ctrl: return .maskControl
-        case .opt:  return .maskAlternate
-        case .shift:return .maskShift
-        }
-    }
-
-    var title: String {
-        switch self {
-        case .none: return IadenteL10n.t("无", "None")
-        case .cmd:  return IadenteL10n.t("⌘", "⌘")
-        case .ctrl: return IadenteL10n.t("⌃", "⌃")
-        case .opt:  return IadenteL10n.t("⌥", "⌥")
-        case .shift:return IadenteL10n.t("⇧", "⇧")
-        }
-    }
-}
-
-/// 逐 App 例外（Mos 式三态）：对某个 App 单独覆盖全局鼠标优化行为。
+/// 逐 App 例外（Mos 式两态）：对某个 App 单独覆盖全局鼠标优化行为。
 enum MouseAppOverride: String, Codable, CaseIterable {
     case smooth     // 该 App：强制平滑（忽略全局平滑开关，强制开）
     case invert     // 该 App：强制反转（忽略全局反转开关，强制开）
-    case whitelist  // 该 App：白名单豁免，完全不优化（原样透传）
 
     var title: String {
         switch self {
         case .smooth:    return IadenteL10n.t("强制平滑", "Force smooth")
         case .invert:    return IadenteL10n.t("强制反转", "Force invert")
-        case .whitelist: return IadenteL10n.t("白名单豁免", "Whitelisted (off)")
         }
     }
 }
@@ -228,12 +195,6 @@ struct Configuration: Codable {
     var mouseSpeedGain: Double = 1.0
     /// 鼠标优化 - 平滑时长（秒）：惯性滑行尾迹的持续时间，越大越顺滑、滑行越久。
     var mouseSmoothDuration: Double = 0.18
-    /// 鼠标优化 - 加速键：滚动时按住此修饰键临时加倍速度增益。
-    var mouseAccelKey: MouseModifierKey = .none
-    /// 鼠标优化 - 转换键：滚动时按住此修饰键临时反转方向。
-    var mouseConvertKey: MouseModifierKey = .none
-    /// 鼠标优化 - 禁用键：滚动时按住此修饰键临时关闭平滑（原样透传）。
-    var mouseDisableKey: MouseModifierKey = .none
     /// 鼠标优化 - 侧键 X1（后退键）绑定的 macall 动作；none = 透传。
     var mouseSideAction1: MouseSideAction = .none
     /// 鼠标优化 - 侧键 X2（前进键）绑定的 macall 动作；none = 透传。
@@ -480,7 +441,7 @@ struct Configuration: Codable {
         case enabled, gap, monitorShowPercentage, enabledFeatures, enabledHotkeys, hotkeys, previewEnabled, outputDeviceUIDs, perAppVolume, perAppMuted, perAppDeviceUIDs, autoRouteOutput, devicePriority, outputSwitcherDeviceUIDs, dockToggleBehavior, edgeSnapSelectorEnabled, edgeSnapLeftLayout, edgeSnapRightLayout
         case hiddenAudioApps, hiddenAudioAppNames, audioDeviceOrder, hiddenAudioDevices
         case clipboardMaxItems, clipboardRetentionDays, clipboardKeepImages, clipboardKeepFiles, magnifierZoom, maxTemporaryScenes, defaultInputDeviceUID, systemSoundOutputDeviceUID, autoDuckOnHeadphoneUnplug, autoDuckTargetVolume, touchpadSensitivity, touchpadStartZone, touchpadMinTravel, touchpadLeftAction, touchpadRightAction, touchpadHaptic
-        case mouseScrollInvert, mouseSmoothScroll, mouseMinStep, mouseSpeedGain, mouseSmoothDuration, mouseAccelKey, mouseConvertKey, mouseDisableKey, mouseSideAction1, mouseSideAction2, mouseAppOverrides
+        case mouseScrollInvert, mouseSmoothScroll, mouseMinStep, mouseSpeedGain, mouseSmoothDuration, mouseSideAction1, mouseSideAction2, mouseAppOverrides
     }
 
     init(from d: Decoder) throws {
@@ -528,9 +489,6 @@ struct Configuration: Codable {
         mouseMinStep = try c.decodeIfPresent(Double.self, forKey: .mouseMinStep) ?? 1.0
         mouseSpeedGain = try c.decodeIfPresent(Double.self, forKey: .mouseSpeedGain) ?? 1.0
         mouseSmoothDuration = try c.decodeIfPresent(Double.self, forKey: .mouseSmoothDuration) ?? 0.18
-        mouseAccelKey = try c.decodeIfPresent(MouseModifierKey.self, forKey: .mouseAccelKey) ?? .none
-        mouseConvertKey = try c.decodeIfPresent(MouseModifierKey.self, forKey: .mouseConvertKey) ?? .none
-        mouseDisableKey = try c.decodeIfPresent(MouseModifierKey.self, forKey: .mouseDisableKey) ?? .none
         mouseSideAction1 = try c.decodeIfPresent(MouseSideAction.self, forKey: .mouseSideAction1) ?? .none
         mouseSideAction2 = try c.decodeIfPresent(MouseSideAction.self, forKey: .mouseSideAction2) ?? .none
         mouseAppOverrides = try c.decodeIfPresent([String: MouseAppOverride].self, forKey: .mouseAppOverrides) ?? [:]
@@ -581,9 +539,6 @@ struct Configuration: Codable {
         try c.encode(mouseMinStep, forKey: .mouseMinStep)
         try c.encode(mouseSpeedGain, forKey: .mouseSpeedGain)
         try c.encode(mouseSmoothDuration, forKey: .mouseSmoothDuration)
-        try c.encode(mouseAccelKey, forKey: .mouseAccelKey)
-        try c.encode(mouseConvertKey, forKey: .mouseConvertKey)
-        try c.encode(mouseDisableKey, forKey: .mouseDisableKey)
         try c.encode(mouseSideAction1, forKey: .mouseSideAction1)
         try c.encode(mouseSideAction2, forKey: .mouseSideAction2)
         try c.encode(mouseAppOverrides, forKey: .mouseAppOverrides)

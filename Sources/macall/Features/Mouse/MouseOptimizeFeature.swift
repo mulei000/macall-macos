@@ -219,17 +219,8 @@ final class MouseOptimizeFeature: Feature {
             switch override {
             case .smooth:    effSmooth = true
             case .invert:    effInvert = true
-            case .whitelist: effSmooth = false; effInvert = false
             }
         }
-
-        // 高级修饰键（滚动时按住临时改变行为）。
-        let flags = event.flags
-        let accel = config.mouseAccelKey != .none && flags.contains(config.mouseAccelKey.flag)
-        let convert = config.mouseConvertKey != .none && flags.contains(config.mouseConvertKey.flag)
-        let disable = config.mouseDisableKey != .none && flags.contains(config.mouseDisableKey.flag)
-        if disable { effSmooth = false }
-        if convert { effInvert = true }
 
         let rawV = event.getIntegerValueField(.scrollWheelEventDeltaAxis1)
         let rawH = event.getIntegerValueField(.scrollWheelEventDeltaAxis2)
@@ -247,7 +238,7 @@ final class MouseOptimizeFeature: Feature {
 
         // 平滑：把这次 tick 的能量（含速度增益）并入蓄水池，吃掉原事件，
         // 由惯性引擎逐帧放出（总滚动量守恒）。
-        let gain = config.mouseSpeedGain * (accel ? 2.0 : 1.0)
+        let gain = config.mouseSpeedGain
         let now = ProcessInfo.processInfo.systemUptime
         // 长间隔（>150ms）视为新一次滚动手势，先把上一轮的残量补发干净。
         if now - lastScrollTime > 0.15 {
@@ -356,6 +347,8 @@ final class MouseOptimizeFeature: Feature {
         let action: MouseSideAction? = (btn == 3) ? config.mouseSideAction1
                                : (btn == 4) ? config.mouseSideAction2
                                : nil
+        // [诊断] 无条件记录：原始按键号、解析到的绑定、是否命中（诉求 B 排查）。
+        Log.info("[mouse][diag] 侧键事件 buttonNumber=\(btn) 解析动作=\(action?.rawValue ?? "nil") 命中=\(action != nil && action != .none)")
         guard let action, action != .none, let target = action.target else {
             return Unmanaged.passRetained(event)
         }
@@ -366,6 +359,7 @@ final class MouseOptimizeFeature: Feature {
             Log.info("[mouse] 侧键 \(btn == 3 ? "X1" : "X2") → 派发 \(target.feature)/\(target.action)")
             return nil
         }
+        Log.warning("[mouse][diag] 侧键命中但 registry 未就绪，退回透传 buttonNumber=\(btn)")
         return Unmanaged.passRetained(event)
     }
 }
